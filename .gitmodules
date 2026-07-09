@@ -1,0 +1,3 @@
+[submodule "eabp"]
+	path = eabp
+	url = ../eabp

@@ -1,0 +1,34 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  elisp:
+    name: Elisp (ERT + bundle freshness)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          # The EABP core is the `eabp' submodule; the suite loads it.
+          submodules: recursive
+
+      - uses: purcell/setup-emacs@master
+        with:
+          version: "30.1"
+
+      - name: Glasspane ERT suite (against the submodule core)
+        run: emacs -Q --batch -l test/glasspane-tests.el -f ert-run-tests-batch-and-exit
+
+      # glasspane.el is a generated bundle; a PR that edits emacs/ sources
+      # must ship it regenerated.
+      - name: Bundle is current
+        run: |
+          emacs --batch -l emacs/build-bundle.el
+          git diff --exit-code glasspane.el
