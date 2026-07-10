@@ -25,7 +25,6 @@
 ;; Not used directly — pulled in so (require 'glasspane-ui) still assembles
 ;; the complete reference app for init-file users.
 (require 'jetpacs-emacs-ui)
-(require 'jetpacs-package-browser)
 (require 'cl-lib)
 
 (defvar glasspane-ui--detail-ref nil
