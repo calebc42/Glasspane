@@ -269,3 +269,24 @@ performance.
       answer shown), quit (back to idle; due count reflects work done).
 - [ ] **Settings:** Settings → Review shows "New cards per day" /
       "Max reviews per day" and edits persist through Customize.
+
+## 12. Elisp org toolbar (data-driven, 2026-07-10 — needs fresh APK + bundle)
+
+The org toolbar is now data from `glasspane-org-toolbar.el`, interpreted
+by the companion's `SduiToolbar` (the Kotlin `OrgEditToolbar` is gone).
+Open an org file in the phone editor (edit mode, keyboard up):
+
+- [ ] The toolbar renders above the keyboard with all 17 buttons
+      (H … TS), horizontally scrollable.
+- [ ] **`${selection}` wrap:** select a word, tap **B** → `*word*` with
+      the word still selected; tap **B** with nothing selected → `**`
+      with the cursor between the stars.
+- [ ] **Line op:** on a heading line, **→** demotes (adds a star),
+      **↑**/**↓** swap lines; each op is a single undo step.
+- [ ] **Long-press timestamp:** tap **TS** → `[2026-…]` inactive stamp;
+      long-press (haptic) → `<2026-…>` active stamp. Same pattern on
+      `[/]` → long-press gives `[%]`.
+- [ ] **Src dialog with a custom language:** Src → Custom… → the
+      Language dialog (free text) → entering `dot` inserts a
+      `#+begin_src dot` block on its own lines with the cursor on the
+      empty middle line.

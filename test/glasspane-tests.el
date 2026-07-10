@@ -1090,6 +1090,30 @@ Only run this after an INTENTIONAL wire-format change; review the diff."
   (dolist (lvl '(0.0 0.5 1.0))
     (should-not (jetpacs-lint-spec (glasspane-gallery--gauge lvl)))))
 
+(ert-deftest glasspane-org-toolbar-lints-and-roundtrips ()
+  "The org toolbar is wire-valid data on an editor node (SPEC §9).
+This list is the toolbar's specification of record — the companion's
+OrgEditToolbar.kt is gone — so every op must stay inside the closed
+vocabulary `jetpacs-lint' checks."
+  (let ((ed (jetpacs-editor "f.org" "content"
+                         :syntax "org"
+                         :toolbar (glasspane-org-toolbar))))
+    (should-not (jetpacs-lint-spec ed))
+    (let* ((toolbar (alist-get 'toolbar (jetpacs-render-to-json ed)))
+           (items (append toolbar nil)))
+      (should (vectorp toolbar))
+      (should (= 17 (length items)))
+      ;; The long-press secondaries (progress cookie, timestamp) survive.
+      (should (= 2 (cl-count-if (lambda (item) (assq 'long_press item)) items)))
+      ;; The src menu keeps its free-form ${input:Language} escape.
+      (should (cl-find-if
+               (lambda (item)
+                 (cl-find-if (lambda (sub)
+                               (string-search "${input:Language}"
+                                              (or (alist-get 'snippet sub) "")))
+                             (append (alist-get 'menu item) nil)))
+               items)))))
+
 ;; ─── Multi-tenant ownership (Phase E) ─────────────────────────────────────────
 
 ;; ─── App identity (jetpacs-defapp, AUTO Task 14) ────────────────────────────────

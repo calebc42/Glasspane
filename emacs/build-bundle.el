@@ -36,6 +36,7 @@
                     "apps/glasspane/glasspane-org-rich.el"
                     "apps/glasspane/glasspane-org-reader.el"
                     "apps/glasspane/glasspane-clock.el"
+                    "apps/glasspane/glasspane-org-toolbar.el"
                     "apps/glasspane/glasspane-ui.el"
                     "apps/glasspane/glasspane-journal.el"
                     "apps/glasspane/glasspane-views.el"

@@ -1,6 +1,8 @@
 # Plan: the org toolbar as elisp (data-driven toolbars, Glasspane side)
 
-**STATUS (2026-07-10): approved; BLOCKED on the jetpacs side landing.**
+**STATUS (2026-07-10): LANDED — jetpacs side is commit `e51783b`, the
+submodule pin is bumped to it, and all four tasks below are done; only
+the on-device spot-checks (TESTING-ON-DEVICE §12) remain.**
 This is the Glasspane half of the jetpacs plan
 [PLAN-data-driven-toolbars.md](https://github.com/calebc42/jetpacs/blob/main/docs/PLAN-data-driven-toolbars.md)
 — read that first; it is the single source of truth for the wire design

@@ -16,6 +16,7 @@
 (require 'jetpacs-apps)
 (require 'glasspane-org)
 (require 'glasspane-clock)
+(require 'glasspane-org-toolbar)
 (require 'glasspane-org-reader)
 (require 'jetpacs-files)
 (require 'jetpacs-keymap)
@@ -1294,7 +1295,7 @@ container would break Compose) and wrap otherwise."
               (jetpacs-column
                (jetpacs-editor (format "detail-%s" pos) content
                             :syntax "org"
-                            :toolbar "org"
+                            :toolbar (glasspane-org-toolbar)
                             :line-numbers (and jetpacs-line-numbers
                                                (symbol-name jetpacs-line-numbers))
                             :on-save (jetpacs-action "detail.save"
@@ -2691,10 +2692,11 @@ orgro sparse-filter parity item."
 (add-hook 'jetpacs-files-editor-body-functions #'glasspane-ui--org-editor-body)
 (add-hook 'jetpacs-files-editor-actions-functions #'glasspane-ui--org-editor-actions)
 
-;; Org files get the org formatting toolbar above the keyboard — declared
-;; in the editor spec, so the renderer stays app-agnostic.
+;; Org files get the org formatting toolbar above the keyboard — composed
+;; as data in the editor spec (glasspane-org-toolbar.el), so the renderer
+;; stays app-agnostic and the companion ships no org Kotlin.
 (setq jetpacs-files-editor-toolbar-function
-      (lambda (file) (when (glasspane-ui--org-file-p file) "org")))
+      (lambda (file) (when (glasspane-ui--org-file-p file) (glasspane-org-toolbar))))
 
 ;; Org files open reader-first; everything else lands in the editor.
 ;; A fresh file starts unfiltered.
