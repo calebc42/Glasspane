@@ -313,3 +313,26 @@ disappears on update — re-add the new ones.
       the last task (chronometer notification appears) and "Clock out"
       stops it, both without opening the app; with Emacs dead the taps
       queue and replay on reconnect.
+
+## 14. Tier A adoption (badges, sheets, month grid — 2026-07-10, fresh APK + bundle)
+
+- [ ] **Agenda tab badge:** with items due today (overdue included), the
+      Agenda tab icon carries the count; completing/removing everything
+      due clears the badge on the next push; counts over 99 show "99+".
+- [ ] **Review drawer badge:** with org-srs installed and cards due, the
+      drawer's Review entry shows the due count as trailing text; zero
+      due → no badge.
+- [ ] **Sheet dialogs:** any prompt — capture template picker, a
+      `completing-read` bridge, Files rename — now rises as a bottom
+      sheet with a drag handle; swipe-down dismisses (same
+      prompt-cancel semantics as tapping outside the old dialog).
+      Settings → Appearance → "Dialog presentation" set to centered
+      restores the old window (takes effect on the next dialog).
+- [ ] **Month grid agenda:** Agenda → Month chip → the curated calendar
+      renders (its own ‹ month › header; the app's nav row is gone in
+      this mode). Today is outlined; days with items carry up to 3
+      dots; tapping a day fills it and the "Events for" list follows.
+      Swiping the grid (or chevrons) changes month → marks refresh via
+      the `agenda.set-month` round-trip; a month with nothing scheduled
+      shows a bare grid. Away from the current month, a "Today" chip
+      appears above the grid and jumps back.

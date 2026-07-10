@@ -538,10 +538,13 @@ labelled menu rather than cluttering the bar."
 (jetpacs-shell-define-view "srs" :builder #'glasspane-srs--view :order 78)
 
 ;; Everyday nav (the drawer contract); no entry while org-srs is absent.
+;; The due count rides the drawer item's badge (memoised; nil when clear).
 (jetpacs-shell-add-drawer-item
  45 (lambda ()
       (when (glasspane-srs-available-p)
-        (jetpacs-drawer-item "school" "Review" (jetpacs-shell-switch-view "srs")))))
+        (jetpacs-drawer-item "school" "Review" (jetpacs-shell-switch-view "srs")
+                          :badge (let ((due (glasspane-srs--due-count)))
+                                   (and (numberp due) (> due 0) due))))))
 
 ;; ─── Actions ─────────────────────────────────────────────────────────────────
 

@@ -3081,8 +3081,19 @@ suppressed identical push would leave it frozen."
                                        :when-offline "drop")))))
    :snackbar snackbar)))
 
+(defun glasspane-ui--agenda-badge ()
+  "Today's agenda item count (overdue included) for the Agenda tab badge.
+Reads the memoised day extraction, so a push recomputes nothing; nil
+\(no badge) when the day is clear."
+  (let ((n (length (condition-case nil
+                       (glasspane-org--agenda-items 'day)
+                     (error nil)))))
+    (and (> n 0) n)))
+
 (jetpacs-shell-define-view "agenda" :builder #'glasspane-ui--agenda-view
-                        :tab '(:icon "event" :label "Agenda") :order 10)
+                        :tab '(:icon "event" :label "Agenda"
+                               :badge glasspane-ui--agenda-badge)
+                        :order 10)
 (jetpacs-shell-define-view "tasks" :builder #'glasspane-ui--tasks-view
                         :tab '(:icon "checklist" :label "Tasks") :order 20)
 ;; The clock lost its tab 2026-07-06 (user decision: six tabs was
@@ -3107,6 +3118,12 @@ suppressed identical push would leave it frozen."
              :views '("agenda" "journal" "tasks" "clock" "search" "views"
                       "srs" "settings" "detail")
              :order 10)
+
+;; App opinion: dialogs present as bottom sheets (SPEC §7 `dialog_style') —
+;; capture templates, pickers, and the whole minibuffer bridge read native
+;; on mobile. Per-user override lives in Settings → Appearance; old
+;; companions ignore the style and center the dialog.
+(setq jetpacs-dialog-style "sheet")
 
 ;; Landing on any non-overlay view closes the detail drill-in.
 (add-hook 'jetpacs-shell-view-switched-hook
@@ -3329,7 +3346,11 @@ and a quick complete button for open todos."
                         :caption "Nothing scheduled for this week."))))
 
 (defun glasspane-ui--agenda-month-view (items anchor)
-  "Month grid for ITEMS, showing the month containing ANCHOR (YYYY-MM-DD)."
+  "Month calendar for ITEMS, showing the month containing ANCHOR (YYYY-MM-DD).
+The grid is the curated `month_grid' node when the companion has it
+\(month swipe, today/selection states, a11y grid semantics); an older
+companion gets `glasspane-ui--agenda-month-fallback' — the composed
+`flow_row'-style grid, the documented fallback recipe."
   (let* ((today (format-time-string "%Y-%m-%d"))
          (month-prefix (substring anchor 0 7))
          (sel (jetpacs-ui-state "agenda-selected-date"))
@@ -3340,8 +3361,35 @@ and a quick complete button for open todos."
                          ((string-prefix-p month-prefix today) today)
                          (t anchor)))
          (items-by-date (seq-group-by (lambda (it) (alist-get 'date it)) items))
-         (selected-items (cdr (assoc selected-date items-by-date)))
-         (month (string-to-number (substring anchor 5 7)))
+         (selected-items (cdr (assoc selected-date items-by-date))))
+    (jetpacs-column
+     (if (jetpacs-node-supported-p "month_grid")
+         (jetpacs-month-grid month-prefix
+                          ;; One mark per date, dots = item count (the
+                          ;; companion caps the render at 3).
+                          :marks (delq nil
+                                       (mapcar (lambda (g)
+                                                 (and (stringp (car g))
+                                                      (cons (car g)
+                                                            (length (cdr g)))))
+                                               items-by-date))
+                          :selected selected-date
+                          ;; Taps arrive with the ISO date as args.value.
+                          :on-day-tap (jetpacs-action "agenda.select-date")
+                          ;; Companion-local swipe/chevrons report the shown
+                          ;; month; the handler re-anchors and pushes fresh
+                          ;; marks for it.
+                          :on-month-change (jetpacs-action "agenda.set-month"))
+       (glasspane-ui--agenda-month-fallback items-by-date anchor selected-date))
+     (jetpacs-divider)
+     (jetpacs-section-header (format "Events for %s" selected-date))
+     (if selected-items
+         (apply #'jetpacs-lazy-column (mapcar #'glasspane-ui--agenda-card selected-items))
+       (jetpacs-text "No events" 'caption)))))
+
+(defun glasspane-ui--agenda-month-fallback (items-by-date anchor selected-date)
+  "The composed month grid for companions that predate `month_grid'."
+  (let* ((month (string-to-number (substring anchor 5 7)))
          (year (string-to-number (substring anchor 0 4)))
          (days-in-month (calendar-last-day-of-month month year))
          (first-day-of-month (calendar-day-of-week (list month 1 year)))
@@ -3377,12 +3425,7 @@ and a quick complete button for open todos."
     (jetpacs-column
      week-header
      (jetpacs-spacer :height 8)
-     (apply #'jetpacs-column (nreverse grid-rows))
-     (jetpacs-divider)
-     (jetpacs-section-header (format "Events for %s" selected-date))
-     (if selected-items
-         (apply #'jetpacs-lazy-column (mapcar #'glasspane-ui--agenda-card selected-items))
-       (jetpacs-text "No events" 'caption)))))
+     (apply #'jetpacs-column (nreverse grid-rows)))))
 
 (defun glasspane-ui--agenda-body ()
   (let* ((mode (or (jetpacs-ui-state "agenda-mode") "day"))
@@ -3418,7 +3461,18 @@ and a quick complete button for open todos."
                                     :on-tap (jetpacs-action "agenda.set-mode" :args '((mode . "month"))))
                          custom-chips)
                   (when is-span
-                    (glasspane-ui--agenda-nav-row mode anchor))
+                    (if (and (equal mode "month")
+                             (jetpacs-node-supported-p "month_grid"))
+                        ;; The curated grid carries its own month header,
+                        ;; chevrons, and swipe — only the jump-home
+                        ;; affordance remains ours.
+                        (unless (equal (substring anchor 0 7)
+                                       (format-time-string "%Y-%m"))
+                          (jetpacs-row
+                           (jetpacs-spacer :weight 1)
+                           (jetpacs-assist-chip "Today" :icon "today"
+                                             :on-tap (jetpacs-action "agenda.today"))))
+                      (glasspane-ui--agenda-nav-row mode anchor)))
                   (jetpacs-spacer :height 4)
                   (cond
                    ((equal mode "day")
@@ -4845,6 +4899,9 @@ Returns non-nil on success; messages and returns nil on failure."
  '((calendar-week-start-day :label "Week start day (0=Sun, 1=Mon)")
    (calendar-latitude :label "Latitude (e.g. 40.7)")
    (calendar-longitude :label "Longitude (e.g. -74.0)")))
+(jetpacs-settings-register-section
+ "Appearance"
+ '((jetpacs-dialog-style :label "Dialog presentation")))
 
 ;; Org-derived views are memoised; per the cache contract every mutation
 ;; must drop the memo or the phone keeps rendering stale data.
@@ -5059,10 +5116,25 @@ with the new states.  Returns non-nil when persisting succeeded."
     (jetpacs-shell-push)))
 
 (jetpacs-defaction "agenda.select-date"
+  ;; `date' comes from the composed grid's per-cell args; `value' is what
+  ;; the curated month_grid's on_day_tap injects. Same date either way.
   (lambda (args _)
-    (let ((date (alist-get 'date args)))
-      (jetpacs-ui-state-put "agenda-selected-date" date)
-      (jetpacs-shell-push))))
+    (let ((date (or (alist-get 'date args) (alist-get 'value args))))
+      (when (and (stringp date)
+                 (string-match-p "\\`[0-9]\\{4\\}-[0-9]\\{2\\}-[0-9]\\{2\\}\\'" date))
+        (jetpacs-ui-state-put "agenda-selected-date" date)
+        (jetpacs-shell-push)))))
+
+(jetpacs-defaction "agenda.set-month"
+  ;; The curated month grid navigates companion-locally (chevrons, swipe)
+  ;; and reports the newly shown month via on_month_change; anchoring on
+  ;; its 1st re-extracts that month and pushes fresh marks for it.
+  (lambda (args _)
+    (let ((month (alist-get 'value args)))
+      (when (and (stringp month)
+                 (string-match-p "\\`[0-9]\\{4\\}-[0-9]\\{2\\}\\'" month))
+        (jetpacs-ui-state-put "agenda-anchor" (concat month "-01"))
+        (jetpacs-shell-push)))))
 
 (jetpacs-defaction "heading.clock-in"
   (lambda (args _)
@@ -7409,10 +7481,13 @@ labelled menu rather than cluttering the bar."
 (jetpacs-shell-define-view "srs" :builder #'glasspane-srs--view :order 78)
 
 ;; Everyday nav (the drawer contract); no entry while org-srs is absent.
+;; The due count rides the drawer item's badge (memoised; nil when clear).
 (jetpacs-shell-add-drawer-item
  45 (lambda ()
       (when (glasspane-srs-available-p)
-        (jetpacs-drawer-item "school" "Review" (jetpacs-shell-switch-view "srs")))))
+        (jetpacs-drawer-item "school" "Review" (jetpacs-shell-switch-view "srs")
+                          :badge (let ((due (glasspane-srs--due-count)))
+                                   (and (numberp due) (> due 0) due))))))
 
 ;; ─── Actions ─────────────────────────────────────────────────────────────────
 

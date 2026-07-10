@@ -200,6 +200,48 @@ the specs must carry the org actions the Kotlin used to hardcode."
         (should (equal "org.capture.show"
                        (alist-get 'action (alist-get 'header_action spec))))))))
 
+(ert-deftest glasspane-tier-a-adoption ()
+  "Tier A adoption: curated month_grid agenda, tab badge, sheet dialogs.
+Batch runs have no session, so `jetpacs-node-supported-p' answers nil —
+the curated branch is exercised under an explicit supported mock, the
+fallback branch under the real disconnected predicate."
+  (cl-letf (((symbol-function 'glasspane-org--agenda-items)
+             (lambda (&rest _)
+               (list '((headline . "A") (date . "2026-07-10"))
+                     '((headline . "B") (date . "2026-07-10"))
+                     '((headline . "C") (date . "2026-07-14"))))))
+    ;; The Agenda tab badge is the day count; nil when the day is clear.
+    (should (= 3 (glasspane-ui--agenda-badge)))
+    ;; Curated branch: a month_grid child carrying month, marks, actions.
+    (cl-letf (((symbol-function 'jetpacs-node-supported-p) (lambda (_) t)))
+      (let* ((view (glasspane-ui--agenda-month-view
+                    (glasspane-org--agenda-items 'month) "2026-07-15"))
+             (json (jetpacs-render-to-json view))
+             (grid (seq-find (lambda (c) (equal "month_grid" (alist-get 't c)))
+                             (append (alist-get 'children json) nil))))
+        (should-not (jetpacs-lint-spec view))
+        (should grid)
+        (should (equal "2026-07" (alist-get 'month grid)))
+        (should (= 2 (alist-get 'dots
+                                (alist-get '2026-07-10 (alist-get 'marks grid)))))
+        (should (equal "agenda.set-month"
+                       (alist-get 'action (alist-get 'on_month_change grid))))
+        (should (equal "agenda.select-date"
+                       (alist-get 'action (alist-get 'on_day_tap grid))))))
+    ;; A companion without the node gets the composed grid — and it lints.
+    (let ((view (glasspane-ui--agenda-month-view
+                 (glasspane-org--agenda-items 'month) "2026-07-15")))
+      (should-not (jetpacs-lint-spec view))
+      (should-not (string-search
+                   "month_grid"
+                   (json-serialize view :null-object :null
+                                   :false-object :false)))))
+  (cl-letf (((symbol-function 'glasspane-org--agenda-items)
+             (lambda (&rest _) nil)))
+    (should-not (glasspane-ui--agenda-badge)))
+  ;; The app opinion: dialogs present as sheets.
+  (should (equal "sheet" jetpacs-dialog-style)))
+
 ;; ─── Extraction cache ───────────────────────────────────────────────────────
 
 (ert-deftest glasspane-org-cache-memoises ()
