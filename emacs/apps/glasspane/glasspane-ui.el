@@ -228,15 +228,15 @@ suppressed identical push would leave it frozen."
 ;; ─── Shell views ─────────────────────────────────────────────────────────────
 
 (defun glasspane-ui--agenda-view (snackbar)
-  (jetpacs-shell-tab-view "agenda" (glasspane-ui--agenda-body)
+  (jetpacs-shell-tab-view "glasspane.agenda" (glasspane-ui--agenda-body)
                        :snackbar snackbar))
 
 (defun glasspane-ui--tasks-view (snackbar)
-  (jetpacs-shell-tab-view "tasks" (glasspane-ui--tasks-body)
+  (jetpacs-shell-tab-view "glasspane.tasks" (glasspane-ui--tasks-body)
                        :snackbar snackbar))
 
 (defun glasspane-ui--clock-view (snackbar)
-  (jetpacs-shell-tab-view "clock" (glasspane-ui--clock-body)
+  (jetpacs-shell-tab-view "glasspane.clock" (glasspane-ui--clock-body)
                        :snackbar snackbar))
 
 (defun glasspane-ui--search-view (snackbar)
@@ -316,33 +316,39 @@ Reads the memoised day extraction, so a push recomputes nothing; nil
                      (error nil)))))
     (and (> n 0) n)))
 
-(jetpacs-shell-define-view "agenda" :builder #'glasspane-ui--agenda-view
+(jetpacs-shell-define-view "glasspane.agenda" :builder #'glasspane-ui--agenda-view
                         :tab '(:icon "event" :label "Agenda"
                                :badge glasspane-ui--agenda-badge)
                         :order 10)
-(jetpacs-shell-define-view "tasks" :builder #'glasspane-ui--tasks-view
+(jetpacs-shell-define-view "glasspane.tasks" :builder #'glasspane-ui--tasks-view
                         :tab '(:icon "checklist" :label "Tasks") :order 20)
 ;; The clock lost its tab 2026-07-06 (user decision: six tabs was
 ;; crowded and the screen alone felt barren) — its body now renders as
 ;; a section of the Journal view.  The view stays registered so cached
-;; `view.switch' targets from older pushes still resolve.
-(jetpacs-shell-define-view "clock" :builder #'glasspane-ui--clock-view
+;; `view.switch' targets from older pushes still resolve.  (Targets
+;; cached before the 2026-07-10 "glasspane." namespacing name the bare
+;; views and drop harmlessly; one fresh push re-caches.)
+(jetpacs-shell-define-view "glasspane.clock" :builder #'glasspane-ui--clock-view
                         :order 30)
-(jetpacs-shell-define-view "search" :builder #'glasspane-ui--search-view
+(jetpacs-shell-define-view "glasspane.search" :builder #'glasspane-ui--search-view
                         :order 70)
-(jetpacs-shell-define-view "settings" :builder #'glasspane-ui--settings-view
+(jetpacs-shell-define-view "glasspane.settings" :builder #'glasspane-ui--settings-view
                         :order 80)
-(jetpacs-shell-define-view "detail" :builder #'glasspane-ui--detail-view
+(jetpacs-shell-define-view "glasspane.detail" :builder #'glasspane-ui--detail-view
                         :when (lambda () (and glasspane-ui--detail-ref t))
                         :overlay (lambda () (and glasspane-ui--detail-ref t))
                         :order 110)
 
 ;; Glasspane is the first `jetpacs-defapp'. Zero visible change while it is
 ;; the only app; load a second app (jetpacs-hello.el) and the launcher home
-;; appears with these views grouped as Glasspane's own.
+;; appears with these views grouped as Glasspane's own.  Every view name
+;; carries the "glasspane." namespace so a coexisting app (orgzly's
+;; "orgzly.agenda", say) can never replace one of these in the registry.
 (jetpacs-defapp "glasspane" :label "Glasspane" :icon "event"
-             :views '("agenda" "journal" "tasks" "clock" "search" "views"
-                      "srs" "settings" "detail")
+             :views '("glasspane.agenda" "glasspane.journal" "glasspane.tasks"
+                      "glasspane.clock" "glasspane.search" "glasspane.views"
+                      "glasspane.srs" "glasspane.settings" "glasspane.detail"
+                      "glasspane.gallery")
              :order 10)
 
 ;; App opinion: dialogs present as bottom sheets (SPEC §7 `dialog_style') —
@@ -355,21 +361,24 @@ Reads the memoised day extraction, so a push recomputes nothing; nil
 (add-hook 'jetpacs-shell-view-switched-hook
           (lambda (_view) (setq glasspane-ui--detail-ref nil)))
 
-;; Capture is this app's global affordance: the default FAB on every tab
-;; view that doesn't define its own.
-(setq jetpacs-shell-default-fab-function
-      (lambda (_name)
-        (jetpacs-fab "add" :label "Capture"
-                  :on-tap (jetpacs-action "org.capture.show"))))
+;; Capture is this app's signature affordance: the default FAB on every
+;; Glasspane tab view that doesn't define its own — and, registered
+;; per-app, never on a coexisting app's views.
+(jetpacs-apps-set-default-fab "glasspane"
+                           (lambda (_name)
+                             (jetpacs-fab "add" :label "Capture"
+                                       :on-tap (jetpacs-action "org.capture.show"))))
 
 ;; Search from every tab's top bar.  (There used to be a second
 ;; filter_list icon here doing the same switch — one affordance per
-;; destination.)  Settings needs no registration: the core's stock
-;; drawer entry targets the view NAME, so it reaches the richer
-;; "settings" view this app defines in place of the stock one.
-(jetpacs-shell-add-top-action
- 10 (lambda () (jetpacs-icon-button "search" (jetpacs-shell-switch-view "search")
-                                 :content-description "Search")))
+;; destination.)  Owned by the app, so it rides only Glasspane's own
+;; tabs.  Settings needs no registration either way: the stock drawer
+;; entry resolves to "glasspane.settings" while this app is current
+;; (`jetpacs-shell-resolve-view').
+(with-jetpacs-owner "glasspane"
+  (jetpacs-shell-add-top-action
+   10 (lambda () (jetpacs-icon-button "search" (jetpacs-shell-switch-view "glasspane.search")
+                                   :content-description "Search"))))
 
 ;; The org extractions are memoised; an explicit refresh (pull-to-refresh,
 ;; the drawer item, a queue drain) must drop them.
@@ -1696,12 +1705,12 @@ container would break Compose) and wrap otherwise."
     ;; This push IS the navigation, so it forces the detail view.
     (setq glasspane-ui--detail-ref args)
     (setq glasspane-ui--detail-read-mode t)
-    (jetpacs-shell-push nil :switch-to "detail")))
+    (jetpacs-shell-push nil :switch-to "glasspane.detail")))
 
 (jetpacs-defaction "detail.toggle-read"
   (lambda (_ _)
     (setq glasspane-ui--detail-read-mode (not glasspane-ui--detail-read-mode))
-    (jetpacs-shell-push nil :switch-to "detail")))
+    (jetpacs-shell-push nil :switch-to "glasspane.detail")))
 
 (jetpacs-defaction "detail.save"
   (lambda (args _)
@@ -1792,7 +1801,7 @@ Returns \"\" when every filter is at its resting value."
   ;; cache the results, and land the user on the search view.
   (lambda (args _)
     (glasspane-ui--run-search (or (alist-get 'value args) ""))
-    (jetpacs-shell-push nil :switch-to "search")))
+    (jetpacs-shell-push nil :switch-to "glasspane.search")))
 
 (jetpacs-defaction "org.capture.show"
   (lambda (_ _)
@@ -2144,37 +2153,40 @@ Returns non-nil on success; messages and returns nil on failure."
 
 ;; The org settings exposed to the companion, through the generic
 ;; schema-driven machinery (the registry is the security boundary:
-;; only symbols listed here can be modified from the wire).
-(jetpacs-settings-register-section
- "Org Workflow"
- '((org-directory :label "Org directory")
-   (org-log-done :label "Log task completion")
-   (org-log-into-drawer :label "Log into drawer")
-   (org-archive-location :label "Archive location")))
-(jetpacs-settings-register-section
- "Org Agenda"
- '((org-agenda-span :label "Agenda span")
-   (org-deadline-warning-days :label "Deadline warning days")
-   (org-extend-today-until :label "Extend today until (hour)")))
-(jetpacs-settings-register-section
- "Org Editing & Display"
- '((org-startup-folded :label "Initial folding")
-   (org-startup-indented :label "Indent to outline level")
-   (org-hide-emphasis-markers :label "Hide emphasis markers")
-   (org-return-follows-link :label "Enter follows links")
-   (glasspane-babel-timeout :label "Babel run timeout (s)")))
-(jetpacs-settings-register-section
- "User Defaults"
- '((user-full-name :label "Author (Name)")
-   (user-mail-address :label "Email")))
-(jetpacs-settings-register-section
- "Calendar & Location"
- '((calendar-week-start-day :label "Week start day (0=Sun, 1=Mon)")
-   (calendar-latitude :label "Latitude (e.g. 40.7)")
-   (calendar-longitude :label "Longitude (e.g. -74.0)")))
-(jetpacs-settings-register-section
- "Appearance"
- '((jetpacs-dialog-style :label "Dialog presentation")))
+;; only symbols listed here can be modified from the wire).  Registered
+;; under the app's owner id, so coexisting apps' settings never
+;; interleave: these sections render only while Glasspane is current.
+(with-jetpacs-owner "glasspane"
+  (jetpacs-settings-register-section
+   "Org Workflow"
+   '((org-directory :label "Org directory")
+     (org-log-done :label "Log task completion")
+     (org-log-into-drawer :label "Log into drawer")
+     (org-archive-location :label "Archive location")))
+  (jetpacs-settings-register-section
+   "Org Agenda"
+   '((org-agenda-span :label "Agenda span")
+     (org-deadline-warning-days :label "Deadline warning days")
+     (org-extend-today-until :label "Extend today until (hour)")))
+  (jetpacs-settings-register-section
+   "Org Editing & Display"
+   '((org-startup-folded :label "Initial folding")
+     (org-startup-indented :label "Indent to outline level")
+     (org-hide-emphasis-markers :label "Hide emphasis markers")
+     (org-return-follows-link :label "Enter follows links")
+     (glasspane-babel-timeout :label "Babel run timeout (s)")))
+  (jetpacs-settings-register-section
+   "User Defaults"
+   '((user-full-name :label "Author (Name)")
+     (user-mail-address :label "Email")))
+  (jetpacs-settings-register-section
+   "Calendar & Location"
+   '((calendar-week-start-day :label "Week start day (0=Sun, 1=Mon)")
+     (calendar-latitude :label "Latitude (e.g. 40.7)")
+     (calendar-longitude :label "Longitude (e.g. -74.0)")))
+  (jetpacs-settings-register-section
+   "Appearance"
+   '((jetpacs-dialog-style :label "Dialog presentation"))))
 
 ;; Org-derived views are memoised; per the cache contract every mutation
 ;; must drop the memo or the phone keeps rendering stale data.
@@ -2430,7 +2442,7 @@ with the new states.  Returns non-nil when persisting succeeded."
     (jetpacs-ui-state-clear "search-filter-")
     (jetpacs-ui-state-put "search-filter-tags" (vector (alist-get 'tag args)))
     (glasspane-ui--run-search (glasspane-ui--search-filter-query))
-    (jetpacs-shell-push nil :switch-to "search")))
+    (jetpacs-shell-push nil :switch-to "glasspane.search")))
 
 (jetpacs-defaction "org.link.open"
   ;; A tappable link inside rich org text. Emacs resolves it (id:, file:,
@@ -2452,7 +2464,7 @@ with the new states.  Returns non-nil when persisting succeeded."
              (jetpacs-shell-notify
               (format "Couldn't open %s: %s" link (error-message-string err)))))
           (if navigated
-              (jetpacs-shell-push nil :switch-to "detail")
+              (jetpacs-shell-push nil :switch-to "glasspane.detail")
             (jetpacs-shell-push)))))))
 
 (jetpacs-defaction "checkbox.toggle"

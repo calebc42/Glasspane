@@ -297,14 +297,15 @@ Field values mirror through the UI-state store; views.save reads them."
       (glasspane-views--open-view view snackbar)
     (glasspane-views--hub snackbar)))
 
-(jetpacs-shell-define-view "views" :builder #'glasspane-views--view :order 75)
+(jetpacs-shell-define-view "glasspane.views" :builder #'glasspane-views--view :order 75)
 
 ;; Everyday nav: saved views are a daily destination, so they ride the
 ;; drawer (the contract: drawer = everyday nav, satellites = settings).
-(jetpacs-shell-add-drawer-item
- 40 (lambda ()
-      (jetpacs-drawer-item "manage_search" "Saved views"
-                        (jetpacs-shell-switch-view "views"))))
+(with-jetpacs-owner "glasspane"
+  (jetpacs-shell-add-drawer-item
+   40 (lambda ()
+        (jetpacs-drawer-item "manage_search" "Saved views"
+                          (jetpacs-shell-switch-view "glasspane.views")))))
 
 ;; ─── Actions ─────────────────────────────────────────────────────────────────
 
@@ -313,12 +314,12 @@ Field values mirror through the UI-state store; views.save reads them."
     (let ((name (alist-get 'name args)))
       (when (glasspane-views--get name)
         (setq glasspane-views--current name)
-        (jetpacs-shell-push nil :switch-to "views")))))
+        (jetpacs-shell-push nil :switch-to "glasspane.views")))))
 
 (jetpacs-defaction "views.back"
   (lambda (_args _)
     (setq glasspane-views--current nil)
-    (jetpacs-shell-push nil :switch-to "views")))
+    (jetpacs-shell-push nil :switch-to "glasspane.views")))
 
 (jetpacs-defaction "views.rendering"
   (lambda (args _)

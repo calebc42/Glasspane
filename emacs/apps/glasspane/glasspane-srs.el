@@ -567,16 +567,17 @@ labelled menu rather than cluttering the bar."
               (glasspane-srs--top-actions))
    :snackbar snackbar))
 
-(jetpacs-shell-define-view "srs" :builder #'glasspane-srs--view :order 78)
+(jetpacs-shell-define-view "glasspane.srs" :builder #'glasspane-srs--view :order 78)
 
 ;; Everyday nav (the drawer contract); no entry while org-srs is absent.
 ;; The due count rides the drawer item's badge (memoised; nil when clear).
-(jetpacs-shell-add-drawer-item
- 45 (lambda ()
-      (when (glasspane-srs-available-p)
-        (jetpacs-drawer-item "school" "Review" (jetpacs-shell-switch-view "srs")
-                          :badge (let ((due (glasspane-srs--due-count)))
-                                   (and (numberp due) (> due 0) due))))))
+(with-jetpacs-owner "glasspane"
+  (jetpacs-shell-add-drawer-item
+   45 (lambda ()
+        (when (glasspane-srs-available-p)
+          (jetpacs-drawer-item "school" "Review" (jetpacs-shell-switch-view "glasspane.srs")
+                            :badge (let ((due (glasspane-srs--due-count)))
+                                     (and (numberp due) (> due 0) due)))))))
 
 ;; ─── Actions ─────────────────────────────────────────────────────────────────
 
@@ -586,7 +587,7 @@ labelled menu rather than cluttering the bar."
         (jetpacs-shell-notify "org-srs is not installed")
       (setq glasspane-srs--active t glasspane-srs--undo nil)
       (glasspane-srs--advance))
-    (jetpacs-shell-push nil :switch-to "srs")))
+    (jetpacs-shell-push nil :switch-to "glasspane.srs")))
 
 (jetpacs-defaction "srs.answer.show"
   (lambda (_args _)
@@ -735,10 +736,11 @@ Best-effort: a snapshot failure must not block the rating."
 ;; ─── Settings ────────────────────────────────────────────────────────────────
 
 (with-eval-after-load 'org-srs
-  (jetpacs-settings-register-section
-   "Review"
-   '((org-srs-review-new-items-per-day :label "New cards per day")
-     (org-srs-review-max-reviews-per-day :label "Max reviews per day"))))
+  (with-jetpacs-owner "glasspane"
+    (jetpacs-settings-register-section
+     "Review"
+     '((org-srs-review-new-items-per-day :label "New cards per day")
+       (org-srs-review-max-reviews-per-day :label "Max reviews per day")))))
 
 (provide 'glasspane-srs)
 ;;; glasspane-srs.el ends here

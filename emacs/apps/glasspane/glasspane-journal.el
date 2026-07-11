@@ -183,7 +183,7 @@ orgro timestamp-tap-edit item folds in here."
                            (glasspane-journal--carried-over)
                          (error nil)))))
     (jetpacs-shell-tab-view
-     "journal"
+     "glasspane.journal"
      (apply #'jetpacs-lazy-column
             (append
              (list (glasspane-journal--nav-row date today-p)
@@ -204,7 +204,7 @@ orgro timestamp-tap-edit item folds in here."
                      (glasspane-ui--clock-body)))))
      :snackbar snackbar)))
 
-(jetpacs-shell-define-view "journal"
+(jetpacs-shell-define-view "glasspane.journal"
                         :builder #'glasspane-journal--view
                         :tab '(:icon "today" :label "Journal")
                         :order 15)
@@ -215,20 +215,21 @@ orgro timestamp-tap-edit item folds in here."
   "Land on the journal when configured and no tab was chosen this session.
 Depth 5: before the shell's on-connect push (10) builds the surface."
   (when (and glasspane-journal-landing (null jetpacs-shell--current-tab))
-    (setq jetpacs-shell--current-tab "journal")))
+    (setq jetpacs-shell--current-tab "glasspane.journal")))
 
 (add-hook 'jetpacs-connected-hook #'glasspane-journal--apply-landing 5)
 
 (defun glasspane-journal--on-view-switched (view)
   "Leaving the journal resets it to today — returning starts fresh."
-  (unless (equal view "journal")
+  (unless (equal view "glasspane.journal")
     (setq glasspane-journal--date nil)))
 
 (add-hook 'jetpacs-shell-view-switched-hook #'glasspane-journal--on-view-switched)
 
-(jetpacs-settings-register-section
- "Journal"
- '((glasspane-journal-landing :label "Open on the journal")))
+(with-jetpacs-owner "glasspane"
+  (jetpacs-settings-register-section
+   "Journal"
+   '((glasspane-journal-landing :label "Open on the journal"))))
 
 ;; ─── Actions ─────────────────────────────────────────────────────────────────
 

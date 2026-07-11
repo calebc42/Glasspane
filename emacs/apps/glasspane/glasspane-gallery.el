@@ -104,7 +104,7 @@ Screen y grows downward, so a top semicircle spans 180°→0°."
 (jetpacs-defaction "demo.gallery"
   (lambda (_args _payload)
     (setq glasspane-gallery--open t)
-    (jetpacs-shell-push nil :switch-to "gallery")))
+    (jetpacs-shell-push nil :switch-to "glasspane.gallery")))
 
 (jetpacs-defaction "demo.gallery.kind"
   (lambda (args _payload)
@@ -126,7 +126,7 @@ Screen y grows downward, so a top semicircle spans 180°→0°."
 
 ;; ─── Registration ────────────────────────────────────────────────────────────
 
-(jetpacs-shell-define-view "gallery"
+(jetpacs-shell-define-view "glasspane.gallery"
   :builder #'glasspane-gallery--view
   :when (lambda () glasspane-gallery--open)
   :overlay (lambda () glasspane-gallery--open)
@@ -136,9 +136,10 @@ Screen y grows downward, so a top semicircle spans 180°→0°."
 (add-hook 'jetpacs-shell-view-switched-hook
           (lambda (_view) (setq glasspane-gallery--open nil)))
 
-(jetpacs-shell-add-drawer-item
- 65 (lambda () (jetpacs-drawer-item "insights" "Widget Gallery"
-                                 (jetpacs-action "demo.gallery"))))
+(with-jetpacs-owner "glasspane"
+  (jetpacs-shell-add-drawer-item
+   65 (lambda () (jetpacs-drawer-item "insights" "Widget Gallery"
+                                   (jetpacs-action "demo.gallery")))))
 
 ;;;###autoload
 (defun glasspane-demo-gallery ()
@@ -147,7 +148,7 @@ The newest of the demo commands (see also `glasspane-demo-setup')."
   (interactive)
   (setq glasspane-gallery--open t)
   (if (and (fboundp 'jetpacs-connected-p) (jetpacs-connected-p))
-      (progn (jetpacs-shell-push nil :switch-to "gallery")
+      (progn (jetpacs-shell-push nil :switch-to "glasspane.gallery")
              (message "Widget gallery opened on the phone"))
     (message "Jetpacs: not connected — connect a phone, then reopen")))
 
