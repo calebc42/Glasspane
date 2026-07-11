@@ -378,3 +378,36 @@ disappears on update — re-add the new ones.
       `(jetpacs-device-shortcuts-set nil)` clears it.
 - [ ] **Oversized set refused:** six entries → `cap-failed` naming the
       launcher max in *Messages*, and the previous set is untouched.
+
+## 17. Multi-app isolation (namespaced views + owner-scoped chrome — 2026-07-10, fresh bundles, core ≥1.2.0)
+
+All three bundles must be the same generation: a pre-namespacing bundle
+mixed with a new one recreates the very collisions this fixes.  Re-stage
+`jetpacs-core.el`, `orgzly.el`, and `glasspane.el` together.
+
+- [ ] **Tab bars stay separate:** load `orgzly.el`, then `glasspane.el`
+      into the live session → launcher home appears; opening each app
+      shows only its own tabs (Orgzly: Books/Agenda/Search; Glasspane:
+      Agenda/Journal/Tasks…).  Before this change the second bundle's
+      agenda/search/settings silently replaced the first's.
+- [ ] **Drawer follows the app:** in Orgzly the drawer header says
+      "Orgzly" and lists New note / Searches / Notebooks but NOT
+      Saved views / Review / Widget Gallery; in Glasspane the reverse.
+      Core entries (Apps, Settings, Refresh data) appear in both.
+- [ ] **Settings diverge:** drawer → Settings inside Glasspane opens the
+      rich screen (tags, TODO sequences, custom agendas) with only
+      Glasspane + Bridge sections; inside Orgzly it opens the stock
+      screen with only Orgzly + Bridge sections.  No duplicate Settings
+      entries in any drawer.
+- [ ] **FAB containment:** Glasspane's Capture FAB appears on its own
+      tabs only — Orgzly's Books tab shows Orgzly's affordances, no
+      Capture.
+- [ ] **Search action containment:** the top-bar search icon appears on
+      Glasspane tabs only.
+- [ ] **Stale cache upgrade:** with a pre-1.2.0 session cached on the
+      companion, reconnect after upgrading the bundles → old cached tab
+      targets (bare names) drop harmlessly; one push (any tap) restores
+      navigation.
+- [ ] **Live uninstall:** `(jetpacs-app-unregister "orgzly")` from Eval →
+      its launcher card, tabs, drawer band, and settings sections all
+      disappear; Glasspane unaffected.
