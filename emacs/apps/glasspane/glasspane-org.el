@@ -32,9 +32,22 @@ Keys are built by `glasspane-org--cache-key' and include today's date, so
 day-relative readers (the agenda) roll over at midnight even without an
 explicit invalidation.")
 
+(defun glasspane-org--files-mtime (files)
+  "Return the maximum modification time of FILES (or 0 if none exist)."
+  (let ((mtime 0.0))
+    (dolist (file files)
+      (when (file-exists-p file)
+        (let* ((attrs (file-attributes (file-truename file)))
+               (t-val (float-time (file-attribute-modification-time attrs))))
+          (when (> t-val mtime)
+            (setq mtime t-val)))))
+    mtime))
+
 (defun glasspane-org--cache-key (&rest parts)
-  "Build a cache key from PARTS, scoped to today's date."
-  (cons (format-time-string "%Y-%m-%d") parts))
+  "Build a cache key from PARTS, scoped to today's date and the agenda files' mtime.
+This ensures external edits (via sync) automatically bust the cache."
+  (cons (format-time-string "%Y-%m-%d")
+        (cons (glasspane-org--files-mtime (org-agenda-files)) parts)))
 
 (defmacro glasspane-org--with-cache (key &rest body)
   "Memoise BODY's result in `glasspane-org--cache' under KEY."
@@ -196,11 +209,34 @@ Returns a list of alists representing agenda items.  Memoised; see
         (kill-buffer buf)))
     (nreverse items)))
 
+(defun glasspane-org--vulpea-note-to-item (note)
+  "Convert a `vulpea-note' to a Glasspane item alist."
+  (let ((id (vulpea-note-id note))
+        (path (vulpea-note-path note))
+        (title (vulpea-note-title note))
+        (pos (vulpea-note-pos note)))
+    `((headline . ,title)
+      (todo . ,(vulpea-note-todo note))
+      (priority . ,(vulpea-note-priority note))
+      (tags . ,(vconcat (vulpea-note-tags note)))
+      (scheduled . ,(vulpea-note-scheduled note))
+      (deadline  . ,(vulpea-note-deadline note))
+      (file . ,path)
+      (pos . ,pos)
+      (ref . ,(delq nil
+                    (list (when (and id (stringp id) (not (string-empty-p id))) `(id . ,id))
+                          (when path `(file . ,path))
+                          (when pos `(pos . ,pos))
+                          (when title `(headline . ,title))))))))
+
 (defun glasspane-org--todo-items (&optional files)
   "Extract TODO items from FILES (or agenda files).
 Memoised; see `glasspane-org-cache-invalidate'."
   (glasspane-org--with-cache (glasspane-org--cache-key 'todos files)
-    (glasspane-org--todo-items-1 files)))
+    (if (and (featurep 'vulpea) (fboundp 'vulpea-db-query) (null files))
+        (mapcar #'glasspane-org--vulpea-note-to-item
+                (vulpea-db-query (lambda (note) (vulpea-note-todo note))))
+      (glasspane-org--todo-items-1 files))))
 
 (defun glasspane-org--todo-items-1 (files)
   "Uncached worker for `glasspane-org--todo-items'."
@@ -450,6 +486,76 @@ ARGS matches mere presence of the stamp."
      nil 'agenda)
     (nreverse items)))
 
+(defun glasspane-org--vulpea-query-match-p (tree note)
+  "Non-nil when NOTE matches query sexp TREE."
+  (pcase tree
+    (`(and . ,cs) (cl-every (lambda (c) (glasspane-org--vulpea-query-match-p c note)) cs))
+    (`(or . ,cs) (and (cl-some (lambda (c) (glasspane-org--vulpea-query-match-p c note)) cs) t))
+    (`(not ,c) (not (glasspane-org--vulpea-query-match-p c note)))
+    (`(todo . ,kws)
+     (let ((st (vulpea-note-todo note)))
+       (and st (if kws (and (member st kws) t)
+                 (not (member st org-done-keywords))))))
+    (`(done)
+     (let ((st (vulpea-note-todo note)))
+       (and st (member st org-done-keywords) t)))
+    (`(tags . ,tags)
+     (let ((have (vulpea-note-tags note)))
+       (if tags (and (cl-some (lambda (tg) (member tg have)) tags) t)
+         (and have t))))
+    (`(priority ,(and op (pred symbolp)) ,val)
+     (let ((pr (vulpea-note-priority note))
+           (want (string-to-char val)))
+       (and pr (let ((pr-char (string-to-char pr)))
+                 (pcase op
+                   ('< (> pr-char want)) ('<= (>= pr-char want))
+                   ('> (< pr-char want)) ('>= (<= pr-char want))
+                   ('= (= pr-char want))
+                   (_ nil))))))
+    (`(priority . ,ps)
+     (let ((pr (vulpea-note-priority note)))
+       (if ps (and pr (member pr ps) t)
+         (and pr t))))
+    (`(heading . ,texts)
+     (let ((hl (or (vulpea-note-title note) ""))
+           (case-fold-search t))
+       (cl-every (lambda (s) (string-match-p (regexp-quote s) hl)) texts)))
+    (`(regexp . ,res)
+     (let ((hl (or (vulpea-note-title note) ""))
+           (case-fold-search t))
+       (cl-every (lambda (re) (string-match-p re hl)) res)))
+    (`(property ,name . ,val)
+     (let ((v (cdr (assoc name (vulpea-note-properties note)))))
+       (if val (equal v (car val)) (and v t))))
+    (`(level ,n) (eql (vulpea-note-level note) n))
+    (`(level ,n ,m) (let ((l (vulpea-note-level note))) (and l (<= n l m))))
+    (`(scheduled . ,args)
+     (let ((ts (vulpea-note-scheduled note)))
+       (and ts
+            (let ((day (org-time-string-to-absolute ts)))
+              (cl-loop for (key spec) on args by #'cddr
+                       always (pcase key
+                                (:on (= day (glasspane-org--planning-day spec)))
+                                (:from (>= day (glasspane-org--planning-day spec)))
+                                (:to (<= day (glasspane-org--planning-day spec)))
+                                (_ nil)))))))
+    (`(deadline . ,args)
+     (let ((ts (vulpea-note-deadline note)))
+       (and ts
+            (let ((day (org-time-string-to-absolute ts)))
+              (cl-loop for (key spec) on args by #'cddr
+                       always (pcase key
+                                (:on (= day (glasspane-org--planning-day spec)))
+                                (:from (>= day (glasspane-org--planning-day spec)))
+                                (:to (<= day (glasspane-org--planning-day spec)))
+                                (_ nil)))))))
+    (_ nil)))
+
+(defun glasspane-org--vulpea-query (tree)
+  "Run parsed query sexp TREE over the Vulpea database."
+  (let ((notes (vulpea-db-query (lambda (note) (glasspane-org--vulpea-query-match-p tree note)))))
+    (mapcar #'glasspane-org--vulpea-note-to-item notes)))
+
 (defun glasspane-org--query (tree)
   "Run parsed query sexp TREE over the agenda files; heading items.
 The engine behind search and every saved/derived view: `org-ql' when
@@ -458,13 +564,15 @@ on unsupported terms.  Memoised; see `glasspane-org-cache-invalidate'."
   (when tree
     (glasspane-org--with-cache
         (glasspane-org--cache-key 'query (format "%S" tree))
-      (if (fboundp 'org-ql-select)
-          (condition-case err
-              (org-ql-select (org-agenda-files) tree
-                             :action #'glasspane-org--heading-item-at)
-            (user-error (signal (car err) (cdr err)))
-            (error (user-error "Query failed: %s" (error-message-string err))))
-        (glasspane-org--search-fallback tree)))))
+      (if (and (featurep 'vulpea) (fboundp 'vulpea-db-query))
+          (glasspane-org--vulpea-query tree)
+        (if (fboundp 'org-ql-select)
+            (condition-case err
+                (org-ql-select (org-agenda-files) tree
+                               :action #'glasspane-org--heading-item-at)
+              (user-error (signal (car err) (cdr err)))
+              (error (user-error "Query failed: %s" (error-message-string err))))
+          (glasspane-org--search-fallback tree))))))
 
 (defun glasspane-org--search (query)
   "Search agenda files for QUERY; return a list of heading items.
@@ -506,8 +614,11 @@ actually used in the agenda files.  Memoised; see
       (dolist (entry org-tag-alist)
         (let ((tg (if (consp entry) (car entry) entry)))
           (when (stringp tg) (push tg tags))))
-      (dolist (entry (org-global-tags-completion-table))
-        (when (stringp (car entry)) (push (car entry) tags)))
+      (if (and (featurep 'vulpea) (fboundp 'vulpea-db-query-tags))
+          (dolist (tg (vulpea-db-query-tags))
+            (push tg tags))
+        (dolist (entry (org-global-tags-completion-table))
+          (when (stringp (car entry)) (push (car entry) tags))))
       (sort (delete-dups tags) #'string-lessp))))
 
 (defun glasspane-org--file-list ()
@@ -755,6 +866,9 @@ ready for the companion's `reminders.set' frame."
           (lambda ()
             (let ((org-property-changed-functions nil))
               (org-set-property "MODIFIED" (glasspane-org--timestamp-string)))))
+
+(when (featurep 'vulpea)
+  (require 'glasspane-vulpea nil t))
 
 (provide 'glasspane-org)
 ;;; glasspane-org.el ends here
