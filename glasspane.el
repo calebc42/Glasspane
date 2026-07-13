@@ -2594,11 +2594,15 @@ org buffer without necessarily saving it."
   "Reminder list from the previous sync, to suppress identical sends.")
 
 (defun glasspane-ui--sync-reminders ()
-  "Send upcoming timed items to the companion as exact-alarm reminders."
+  "Send upcoming timed items to the companion as owner-scoped exact alarms."
   (let ((rems (condition-case nil (glasspane-org--upcoming-reminders) (error nil))))
     (unless (equal rems glasspane-ui--last-reminders)
-      (setq glasspane-ui--last-reminders rems)
-      (jetpacs-send "reminders.set" `((reminders . ,(vconcat rems)))))))
+      ;; Cache only on a successful arm.  `jetpacs-reminders-owner-set' arms
+      ;; nothing (returns nil) when the companion can't scope reminders per
+      ;; app and another app is present — retry next push rather than pretend
+      ;; it landed.  Owner "glasspane" keeps our alarms off other apps' sets.
+      (when (jetpacs-reminders-owner-set rems "glasspane")
+        (setq glasspane-ui--last-reminders rems)))))
 
 (defun glasspane-ui--widget-item-meta (it hm)
   "Compose the widget metadata line for agenda item IT.
