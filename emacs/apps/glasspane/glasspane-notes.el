@@ -24,17 +24,21 @@
 (require 'jetpacs)
 (require 'jetpacs-widgets)
 (require 'jetpacs-surfaces)
+(require 'jetpacs-source)
 (require 'jetpacs-shell)
 (require 'jetpacs-sync)
 (require 'glasspane-org)
 
 (declare-function vulpea-db-search-by-title "vulpea-db-query")
 (declare-function vulpea-db-query-by-links-some "vulpea-db-query")
+(declare-function vulpea-db-query-by-ids "vulpea-db-query")
 (declare-function vulpea-db-get-by-id "vulpea-db-query")
 (declare-function vulpea-note-unlinked-mentions-async "vulpea-mentions")
 (declare-function vulpea-note-id "vulpea-note")
 (declare-function vulpea-note-title "vulpea-note")
 (declare-function vulpea-note-path "vulpea-note")
+(declare-function vulpea-note-tags "vulpea-note")
+(declare-function vulpea-note-links "vulpea-note")
 (declare-function vulpea-note-aliases "vulpea-note")
 
 (defun glasspane-notes-available-p ()
@@ -113,15 +117,22 @@ so the brackets must be part of it)."
   "Note id -> computed unlinked-mentions list, `pending', or `error'.
 Dropped wholesale by the cache seam.")
 
+(defun glasspane-notes--note-ref (note)
+  "The heading.tap REF alist for vulpea NOTE — id/file/headline, no pos.
+nil-valued cells are pruned so the ref serialises cleanly to JSON."
+  (let ((id (and (fboundp 'vulpea-note-id) (vulpea-note-id note)))
+        (path (vulpea-note-path note))
+        (title (vulpea-note-title note)))
+    (delq nil
+          (list (when (and id (stringp id) (not (string-empty-p id))) `(id . ,id))
+                (when path `(file . ,path))
+                (when title `(headline . ,title))))))
+
 (defun glasspane-notes--note-card (note)
   "A tappable card for NOTE (opens its heading in the detail view)."
-  (let* ((id (and (fboundp 'vulpea-note-id) (vulpea-note-id note)))
-         (path (vulpea-note-path note))
-         (title (vulpea-note-title note))
-         (ref (delq nil
-                    (list (when (and id (stringp id) (not (string-empty-p id))) `(id . ,id))
-                          (when path `(file . ,path))
-                          (when title `(headline . ,title))))))
+  (let ((title (vulpea-note-title note))
+        (path (vulpea-note-path note))
+        (ref (glasspane-notes--note-ref note)))
     (jetpacs-card
      (list (jetpacs-column
             (jetpacs-text title 'body)
@@ -176,27 +187,72 @@ with an :ID: still gets its backlink section."
                (org-entry-get nil "ID"))))
         (error nil))))
 
+;; ─── The notes data source (composer-bindable note graph) ────────────────────
+;;
+;; The synchronous half of the note graph — backlinks and outgoing (forward)
+;; links — exposed as a `jetpacs-defsource' over vulpea's db-query, normalized
+;; to the domain-neutral field contract.  This is the data a `:spec' view (or
+;; the no-code composer) binds; Glasspane's own detail rendering stays a
+;; `:builder' that leans on the same helpers.  Unlinked mentions are the async
+;; ripgrep pass and don't fit a synchronous source, so they stay builder-side.
+
+(defun glasspane-notes--backlinks (id)
+  "Notes that link TO ID (the linked-references set), or nil."
+  (condition-case nil (vulpea-db-query-by-links-some (list id)) (error nil)))
+
+(defun glasspane-notes--forward-links (id)
+  "Notes that ID links out to via id-type links, resolved to note objects."
+  (when-let* ((note (condition-case nil (vulpea-db-get-by-id id) (error nil)))
+              (dest-ids (delq nil
+                              (mapcar (lambda (l)
+                                        (when (equal (plist-get l :type) "id")
+                                          (plist-get l :dest)))
+                                      (vulpea-note-links note)))))
+    (condition-case nil (vulpea-db-query-by-ids dest-ids) (error nil))))
+
+(defun glasspane-notes--note-item (note)
+  "Normalize vulpea NOTE to the \"glasspane.notes\" canonical fields."
+  (let ((path (vulpea-note-path note)))
+    (list (cons 'id        (vulpea-note-id note))
+          (cons 'title     (vulpea-note-title note))
+          (cons 'path      path)
+          (cons 'file_name (and path (file-name-nondirectory path)))
+          (cons 'tags      (append (and (fboundp 'vulpea-note-tags)
+                                        (vulpea-note-tags note))
+                                   nil))
+          (cons 'ref       (glasspane-notes--note-ref note)))))
+
+(defun glasspane-notes--source-query (params)
+  "The \"glasspane.notes\" :query: a RELATION over a note ID -> canonical items.
+RELATION is \"backlinks\" (default) or \"outgoing\".  Yields no items when
+vulpea is unavailable or ID is blank — never an error."
+  (let ((id (alist-get 'id params))
+        (relation (or (alist-get 'relation params) "backlinks")))
+    (when (and (stringp id) (not (string-empty-p id)) (glasspane-notes-available-p))
+      (mapcar #'glasspane-notes--note-item
+              (pcase relation
+                ("outgoing" (glasspane-notes--forward-links id))
+                (_          (glasspane-notes--backlinks id)))))))
+
+(with-jetpacs-owner "glasspane"
+  (jetpacs-defsource "glasspane.notes"
+    :params '((:name id       :type "text" :required t)
+              (:name relation :type "enum" :values ["backlinks" "outgoing"]))
+    :fields '((:name "id"        :type "text")
+              (:name "title"     :type "text")
+              (:name "path"      :type "text")
+              (:name "file_name" :type "text")
+              (:name "tags"      :type "string-list")
+              (:name "ref"       :type "ref"))
+    :query #'glasspane-notes--source-query))
+
 (defun glasspane-notes-detail-nodes (ref)
   "Backlink section nodes for the detail REF (needs an org ID), or nil."
   (when-let* (((glasspane-notes-available-p))
               (id (glasspane-notes--ref-id ref)))
-    (let* ((backlinks (condition-case nil
-                          (vulpea-db-query-by-links-some (list id))
-                        (error nil)))
-           (mentions (gethash id glasspane-notes--mentions 'unfetched))
-           (current-note (condition-case nil
-                             (vulpea-db-get-by-id id)
-                           (error nil)))
-           (forward-link-ids (and current-note
-                                  (delq nil
-                                        (mapcar (lambda (l)
-                                                  (when (equal (plist-get l :type) "id")
-                                                    (plist-get l :dest)))
-                                                (vulpea-note-links current-note)))))
-           (forward-links (and forward-link-ids
-                               (condition-case nil
-                                   (vulpea-db-query-by-ids forward-link-ids)
-                                 (error nil)))))
+    (let* ((backlinks (glasspane-notes--backlinks id))
+           (forward-links (glasspane-notes--forward-links id))
+           (mentions (gethash id glasspane-notes--mentions 'unfetched)))
       (append
        (list (jetpacs-divider)
              (jetpacs-collapsible

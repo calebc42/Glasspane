@@ -137,4 +137,55 @@ link are skipped (the double-link guard)."
       (when-let ((buf (find-buffer-visiting file))) (kill-buffer buf))
       (delete-file file))))
 
+;; ─── The vulpea-backed notes source (glasspane.notes) ───────────────────────
+
+(ert-deftest glasspane-notes-source-registered ()
+  "The notes source is registered under the glasspane owner with its fields."
+  (should (jetpacs-source-p "glasspane.notes"))
+  (should (equal "glasspane" (jetpacs--owner-of "source" "glasspane.notes")))
+  (let ((fields (mapcar (lambda (f) (plist-get f :name))
+                        (jetpacs-source-fields "glasspane.notes"))))
+    (should (member "title" fields))
+    (should (member "file_name" fields))
+    (should (member "ref" fields))))
+
+(ert-deftest glasspane-notes-source-backlinks-canonical ()
+  "The backlinks relation normalizes vulpea notes to canonical fields."
+  (jetpacs-tests--with-fake-vulpea
+      '((:id "n1" :title "Note One" :path "/tmp/notes/one.org")
+        (:id "n2" :title "Note Two" :path "/tmp/notes/two.org"))
+    (let ((items (jetpacs-source-query "glasspane.notes"
+                                       '((id . "target") (relation . "backlinks")))))
+      (should (= 2 (length items)))
+      (let ((it (car items)))
+        (should (equal "n1" (alist-get 'id it)))
+        (should (equal "Note One" (alist-get 'title it)))
+        (should (equal "/tmp/notes/one.org" (alist-get 'path it)))
+        ;; basename derived; tags a list (never a vector); ref carries the id
+        (should (equal "one.org" (alist-get 'file_name it)))
+        (should (listp (alist-get 'tags it)))
+        (should (not (vectorp (alist-get 'tags it))))
+        (should (equal "n1" (alist-get 'id (alist-get 'ref it))))))))
+
+(ert-deftest glasspane-notes-source-outgoing-filters-id-links ()
+  "The outgoing relation resolves only id-type forward links."
+  (jetpacs-tests--with-fake-vulpea
+      '((:id "src" :title "Source" :path "/tmp/src.org"))
+    (cl-letf (((symbol-function 'vulpea-note-links)
+               (lambda (_note) '((:type "id" :dest "d1")
+                                 (:type "http" :dest "skip"))))
+              ((symbol-function 'vulpea-db-query-by-ids)
+               (lambda (ids) (mapcar (lambda (i)
+                                       (list :id i :title "Dest" :path "/tmp/d.org"))
+                                     ids))))
+      (let ((items (jetpacs-source-query "glasspane.notes"
+                                         '((id . "src") (relation . "outgoing")))))
+        (should (= 1 (length items)))
+        (should (equal "d1" (alist-get 'id (car items))))))))
+
+(ert-deftest glasspane-notes-source-unavailable-yields-nil ()
+  "With vulpea unavailable the source returns no items rather than erroring."
+  (cl-letf (((symbol-function 'glasspane-notes-available-p) (lambda () nil)))
+    (should (null (jetpacs-source-query "glasspane.notes" '((id . "x")))))))
+
 (provide 'glasspane-notes-test)
