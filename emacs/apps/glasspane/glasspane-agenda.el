@@ -267,7 +267,7 @@ companion gets `glasspane-ui--agenda-month-fallback' — the composed
          (items-by-date (seq-group-by (lambda (it) (alist-get 'date it)) items))
          (selected-items (cdr (assoc selected-date items-by-date))))
     (jetpacs-column
-     (if (jetpacs-node-supported-p "month_grid")
+     (jetpacs-node-or "month_grid"
          (jetpacs-month-grid month-prefix
                           ;; One mark per date, dots = item count (the
                           ;; companion caps the render at 3).
@@ -359,13 +359,18 @@ The curated month grid carries its own header, chevrons, and swipe —
 only the jump-home chip remains ours there; custom agendas have no
 anchor to navigate."
   (cond
-   ((and (equal mode "month") (jetpacs-node-supported-p "month_grid"))
-    (unless (equal (substring anchor 0 7) (format-time-string "%Y-%m"))
-      (jetpacs-row
-       (jetpacs-spacer :weight 1)
-       (jetpacs-assist-chip "Today" :icon "today"
-                         :on-tap (jetpacs-action "agenda.today")))))
-   ((member mode '("day" "week" "month"))
+   ((equal mode "month")
+    ;; Grid present: it carries its own header/chevrons/swipe, so only the
+    ;; jump-home chip is ours (and only off the current month).  Grid absent:
+    ;; fall back to the shared nav row.
+    (jetpacs-node-or "month_grid"
+      (unless (equal (substring anchor 0 7) (format-time-string "%Y-%m"))
+        (jetpacs-row
+         (jetpacs-spacer :weight 1)
+         (jetpacs-assist-chip "Today" :icon "today"
+                           :on-tap (jetpacs-action "agenda.today"))))
+      (glasspane-ui--agenda-nav-row mode anchor)))
+   ((member mode '("day" "week"))
     (glasspane-ui--agenda-nav-row mode anchor))))
 
 (defun glasspane-ui--agenda-mode-view (mode items anchor)
@@ -393,7 +398,7 @@ anchor to navigate."
 (defun glasspane-ui--agenda-body ()
   (let ((mode (or (jetpacs-ui-state "agenda-mode") "day"))
         (anchor (glasspane-ui--agenda-anchor)))
-    (if (jetpacs-node-supported-p "tabs")
+    (jetpacs-node-or "tabs"
         (glasspane-ui--agenda-body-tabs mode anchor)
       (glasspane-ui--agenda-body-chips mode anchor))))
 
