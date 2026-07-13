@@ -716,7 +716,9 @@ container would break Compose) and wrap otherwise."
     ;; This push IS the navigation, so it forces the detail view.
     (setq glasspane-ui--detail-ref args)
     (setq glasspane-ui--detail-read-mode t)
-    (jetpacs-shell-push nil :switch-to "glasspane.detail")))
+    (jetpacs-shell-push nil :switch-to "glasspane.detail"))
+  :doc "Open a heading in the detail view."
+  :args '((:name ref :type "ref" :required t)))
 
 (jetpacs-defaction "detail.toggle-read"
   (lambda (_ _)
@@ -765,7 +767,10 @@ container would break Compose) and wrap otherwise."
       (when (and state
                  (glasspane-ui--at-ref args (lambda () (org-todo (if clear 'none state))) t))
         (jetpacs-shell-notify (if clear "State cleared" (format "State → %s" state)))
-        (jetpacs-shell-push)))))
+        (jetpacs-shell-push))))
+  :doc "Set a heading's TODO state; an empty state clears it."
+  :args '((:name ref :type "ref" :required t)
+          (:name state :type "text" :required t)))
 
 (jetpacs-defaction "heading.todo-cycle"
   (lambda (args _)
@@ -781,7 +786,9 @@ container would break Compose) and wrap otherwise."
                        (goto-char marker)
                        (org-get-todo-state)))))
         (jetpacs-shell-notify (if state (format "State → %s" state) "State cleared"))
-        (jetpacs-shell-push)))))
+        (jetpacs-shell-push))))
+  :doc "Cycle a heading through the TODO keyword sequence."
+  :args '((:name ref :type "ref" :required t)))
 
 (jetpacs-defaction "heading.schedule"
   (lambda (args _)
@@ -795,7 +802,12 @@ container would break Compose) and wrap otherwise."
                  (glasspane-ui--at-ref args (lambda () (org-schedule nil date)) t)))))
       (when ok
         (jetpacs-shell-notify (if clear "Schedule cleared" (format "Scheduled %s" date)))
-        (jetpacs-shell-push)))))
+        (jetpacs-shell-push))))
+  :doc "Schedule a heading (WHEN relative like \"+1d\", VALUE a date, or CLEAR)."
+  :args '((:name ref :type "ref" :required t)
+          (:name when :type "text")
+          (:name value :type "date")
+          (:name clear :type "bool")))
 
 (jetpacs-defaction "heading.schedule-time"
   ;; Adds/updates the clock time on the existing SCHEDULED date (today if

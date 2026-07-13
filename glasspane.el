@@ -3153,7 +3153,9 @@ The one part of a timestamp the date-stamp chip can't display."
 (jetpacs-defaction "tasks.filter"
   (lambda (args _)
     (setq glasspane-ui--tasks-filter (alist-get 'filter args))
-    (jetpacs-shell-push)))
+    (jetpacs-shell-push))
+  :doc "Filter the tasks collection to a TODO keyword (or \"ALL\")."
+  :args '((:name filter :type "text" :required t)))
 
 (defun glasspane-ui--todo-keywords-apply (seqs)
   "Make SEQS the effective and persisted `org-todo-keywords'.
@@ -4233,7 +4235,9 @@ container would break Compose) and wrap otherwise."
     ;; This push IS the navigation, so it forces the detail view.
     (setq glasspane-ui--detail-ref args)
     (setq glasspane-ui--detail-read-mode t)
-    (jetpacs-shell-push nil :switch-to "glasspane.detail")))
+    (jetpacs-shell-push nil :switch-to "glasspane.detail"))
+  :doc "Open a heading in the detail view."
+  :args '((:name ref :type "ref" :required t)))
 
 (jetpacs-defaction "detail.toggle-read"
   (lambda (_ _)
@@ -4282,7 +4286,10 @@ container would break Compose) and wrap otherwise."
       (when (and state
                  (glasspane-ui--at-ref args (lambda () (org-todo (if clear 'none state))) t))
         (jetpacs-shell-notify (if clear "State cleared" (format "State → %s" state)))
-        (jetpacs-shell-push)))))
+        (jetpacs-shell-push))))
+  :doc "Set a heading's TODO state; an empty state clears it."
+  :args '((:name ref :type "ref" :required t)
+          (:name state :type "text" :required t)))
 
 (jetpacs-defaction "heading.todo-cycle"
   (lambda (args _)
@@ -4298,7 +4305,9 @@ container would break Compose) and wrap otherwise."
                        (goto-char marker)
                        (org-get-todo-state)))))
         (jetpacs-shell-notify (if state (format "State → %s" state) "State cleared"))
-        (jetpacs-shell-push)))))
+        (jetpacs-shell-push))))
+  :doc "Cycle a heading through the TODO keyword sequence."
+  :args '((:name ref :type "ref" :required t)))
 
 (jetpacs-defaction "heading.schedule"
   (lambda (args _)
@@ -4312,7 +4321,12 @@ container would break Compose) and wrap otherwise."
                  (glasspane-ui--at-ref args (lambda () (org-schedule nil date)) t)))))
       (when ok
         (jetpacs-shell-notify (if clear "Schedule cleared" (format "Scheduled %s" date)))
-        (jetpacs-shell-push)))))
+        (jetpacs-shell-push))))
+  :doc "Schedule a heading (WHEN relative like \"+1d\", VALUE a date, or CLEAR)."
+  :args '((:name ref :type "ref" :required t)
+          (:name when :type "text")
+          (:name value :type "date")
+          (:name clear :type "bool")))
 
 (jetpacs-defaction "heading.schedule-time"
   ;; Adds/updates the clock time on the existing SCHEDULED date (today if
@@ -4901,7 +4915,9 @@ Returns \"\" when every filter is at its resting value."
     (jetpacs-ui-state-clear "search-filter-")
     (jetpacs-ui-state-put "search-filter-tags" (vector (alist-get 'tag args)))
     (glasspane-ui--run-search (glasspane-ui--search-filter-query))
-    (jetpacs-shell-push nil :switch-to "glasspane.search")))
+    (jetpacs-shell-push nil :switch-to "glasspane.search"))
+  :doc "Filter search to a single tag."
+  :args '((:name tag :type "text" :required t)))
 
 (provide 'glasspane-search)
 
@@ -5459,7 +5475,10 @@ not exist in jetpacs 1.5.0; until it does, this seam stays on the raw var."
         ;; Rotate the input id: the re-render clears the field.
         (cl-incf glasspane-journal--capture-gen)
         (jetpacs-shell-notify "Added to journal")
-        (jetpacs-shell-push)))))
+        (jetpacs-shell-push))))
+  :doc "Append text to the current journal day."
+  :args '((:name value :type "text" :required t)
+          (:name date :type "date")))
 
 (provide 'glasspane-journal)
 ;;; glasspane-journal.el ends here
@@ -5784,7 +5803,9 @@ Field values mirror through the UI-state store; views.save reads them."
     (let ((name (alist-get 'name args)))
       (when (glasspane-views--get name)
         (setq glasspane-views--current name)
-        (jetpacs-shell-push nil :switch-to "glasspane.views")))))
+        (jetpacs-shell-push nil :switch-to "glasspane.views"))))
+  :doc "Open a saved view by name."
+  :args '((:name name :type "text" :required t)))
 
 (jetpacs-defaction "views.back"
   (lambda (_args _)
@@ -5798,7 +5819,10 @@ Field values mirror through the UI-state store; views.save reads them."
       (when (and view (member rendering glasspane-views--renderings))
         (glasspane-views--set-rendering (alist-get 'name view) rendering)
         (glasspane-views--persist)
-        (jetpacs-shell-push)))))
+        (jetpacs-shell-push))))
+  :doc "Switch a saved view's rendering (list/board/calendar)."
+  :args '((:name name :type "text" :required t)
+          (:name rendering :type "enum" :values ["list" "board" "calendar"] :required t)))
 
 (jetpacs-defaction "views.save"
   (lambda (_args _)
@@ -5848,7 +5872,9 @@ Field values mirror through the UI-state store; views.save reads them."
         (when (equal glasspane-views--current name)
           (setq glasspane-views--current nil))
         (jetpacs-shell-notify (format "Deleted view %s" name))
-        (jetpacs-shell-push)))))
+        (jetpacs-shell-push))))
+  :doc "Delete a saved view by name."
+  :args '((:name name :type "text" :required t)))
 
 (provide 'glasspane-views)
 ;;; glasspane-views.el ends here
@@ -6373,7 +6399,9 @@ vulpea is unavailable or ID is blank — never an error."
            (lambda (_err)
              (puthash id 'error glasspane-notes--mentions)
              (jetpacs-shell-push)))
-          (jetpacs-shell-push))))))
+          (jetpacs-shell-push)))))
+  :doc "Scan for unlinked mentions of a note (async ripgrep)."
+  :args '((:name id :type "text" :required t)))
 
 (defun glasspane-notes--materialize-terms (id matched)
   "The strings to look for on the mention line, most specific first.
@@ -8358,6 +8386,99 @@ rewritten."
 ;;; glasspane-config.el ends here
 
 ;;; ==================================================================
+;;; BEGIN apps/glasspane/glasspane-pack.el
+;;; ==================================================================
+
+;;; glasspane-pack.el --- The Glasspane engine-pack manifest -*- lexical-binding: t; -*-
+
+;; Glasspane ships as a jetpacs *engine pack*: a bundle of elisp (the Tier-1
+;; app) plus a machine-readable manifest, `glasspane-pack.json', that tells the
+;; no-code composer what it can bind without reading any elisp — the data
+;; SOURCES it registers, the composer-facing ACTIONS its cards expose, the
+;; layouts available, and — the SDUI dependency model — the Emacs packages the
+;; engine relies on so the composer can install them.
+;;
+;; The manifest is built from LIVE registrations (`jetpacs-source-catalog',
+;; `jetpacs-action-catalog'), so it can never drift from what the app actually
+;; registers; `emacs/build-pack.el' regenerates the committed JSON and a test
+;; asserts the two agree.  Rich rendering stays in `:builder's that lean on the
+;; declared engine (vulpea/org-ql/…) — the manifest is the seam, not a wire DSL.
+
+;;; Code:
+
+(require 'cl-lib)
+(require 'jetpacs-source)               ; jetpacs-source-catalog
+(require 'jetpacs-surfaces)             ; jetpacs-action-catalog
+(require 'jetpacs-lint)                 ; jetpacs-lint-spec-layouts
+
+(defconst glasspane-pack-id "glasspane"
+  "The pack id the composer keys Glasspane by.")
+
+(defconst glasspane-pack-version "1.0.0"
+  "Version of the Glasspane pack (distinct from `jetpacs-api-version').")
+
+(defconst glasspane-pack-min-jetpacs-api "1.5.0"
+  "The minimum jetpacs api the Glasspane pack requires (source registry + :spec).")
+
+(defconst glasspane-pack-depends
+  '(((name . "org")    (min_version . "9.6"))
+    ((name . "org-ql") (min_version . "0.7"))
+    ((name . "vulpea") (min_version . "2.0"))
+    ((name . "cl-lib") (min_version . "1.0")))
+  "Emacs packages the Glasspane engine relies on, for the composer to install.
+The whole point of the SDUI split: the server may lean on rich packages
+(vulpea's note index, org-ql's query language) and the composer brings them
+in automatically — Glasspane never re-implements what these already do.")
+
+(defun glasspane-pack--sort-by (key entries)
+  "ENTRIES (a list of alists) sorted by their KEY value, for a stable manifest.
+`jetpacs-source-catalog'/`jetpacs-action-catalog' iterate a hash table, so a
+deterministic snapshot must impose an order."
+  (sort (copy-sequence entries)
+        (lambda (a b) (string< (format "%s" (alist-get key a))
+                               (format "%s" (alist-get key b))))))
+
+(defun glasspane-pack-manifest ()
+  "The Glasspane engine-pack manifest, built from live registrations.
+A JSON-serializable alist; sources and actions are name-sorted so the
+generated `glasspane-pack.json' is byte-stable."
+  (list (cons 'pack_id         glasspane-pack-id)
+        (cons 'pack_version    glasspane-pack-version)
+        (cons 'min_jetpacs_api glasspane-pack-min-jetpacs-api)
+        (cons 'feature         glasspane-pack-id)
+        (cons 'depends         (vconcat glasspane-pack-depends))
+        (cons 'layouts         (vconcat jetpacs-lint-spec-layouts))
+        (cons 'sources         (vconcat (glasspane-pack--sort-by
+                                         'name (jetpacs-source-catalog))))
+        ;; Unfiltered on purpose: the pack build loads only the jetpacs core
+        ;; (which annotates no actions) plus Glasspane, so every action carrying
+        ;; :args/:doc metadata is Glasspane's.  (Owner-scoping via
+        ;; `jetpacs-action-catalog'\\='s owner arg is the eventual model, once
+        ;; every Glasspane registration is wrapped in `with-jetpacs-owner' — the
+        ;; detail/search/notes/agenda modules still register anonymously.)
+        (cons 'actions         (vconcat (glasspane-pack--sort-by
+                                         'action (jetpacs-action-catalog))))))
+
+(defun glasspane-pack-json ()
+  "The manifest as pretty-printed, newline-terminated JSON text."
+  (with-temp-buffer
+    (insert (json-serialize (glasspane-pack-manifest)
+                            :null-object :null :false-object :false))
+    (json-pretty-print-buffer)
+    (goto-char (point-max))
+    (unless (bolp) (insert "\n"))
+    (buffer-string)))
+
+(defun glasspane-pack-write (file)
+  "Write the manifest JSON to FILE.  Returns FILE."
+  (let ((coding-system-for-write 'utf-8))
+    (with-temp-file file (insert (glasspane-pack-json))))
+  file)
+
+(provide 'glasspane-pack)
+;;; glasspane-pack.el ends here
+
+;;; ==================================================================
 ;;; BEGIN apps/glasspane/glasspane.el
 ;;; ==================================================================
 
@@ -8389,6 +8510,7 @@ rewritten."
 (require 'glasspane-srs)
 (require 'glasspane-gallery)
 (require 'glasspane-config)
+(require 'glasspane-pack)
 
 ;; Load the app-managed defaults (capture templates, agenda wiring) if
 ;; the user has opted in — init.el code after (require 'glasspane) still

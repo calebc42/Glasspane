@@ -310,7 +310,9 @@ vulpea is unavailable or ID is blank — never an error."
            (lambda (_err)
              (puthash id 'error glasspane-notes--mentions)
              (jetpacs-shell-push)))
-          (jetpacs-shell-push))))))
+          (jetpacs-shell-push)))))
+  :doc "Scan for unlinked mentions of a note (async ripgrep)."
+  :args '((:name id :type "text" :required t)))
 
 (defun glasspane-notes--materialize-terms (id matched)
   "The strings to look for on the mention line, most specific first.

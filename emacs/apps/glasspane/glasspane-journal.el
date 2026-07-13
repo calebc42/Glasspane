@@ -275,7 +275,10 @@ not exist in jetpacs 1.5.0; until it does, this seam stays on the raw var."
         ;; Rotate the input id: the re-render clears the field.
         (cl-incf glasspane-journal--capture-gen)
         (jetpacs-shell-notify "Added to journal")
-        (jetpacs-shell-push)))))
+        (jetpacs-shell-push))))
+  :doc "Append text to the current journal day."
+  :args '((:name value :type "text" :required t)
+          (:name date :type "date")))
 
 (provide 'glasspane-journal)
 ;;; glasspane-journal.el ends here

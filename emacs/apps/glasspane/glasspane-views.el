@@ -314,7 +314,9 @@ Field values mirror through the UI-state store; views.save reads them."
     (let ((name (alist-get 'name args)))
       (when (glasspane-views--get name)
         (setq glasspane-views--current name)
-        (jetpacs-shell-push nil :switch-to "glasspane.views")))))
+        (jetpacs-shell-push nil :switch-to "glasspane.views"))))
+  :doc "Open a saved view by name."
+  :args '((:name name :type "text" :required t)))
 
 (jetpacs-defaction "views.back"
   (lambda (_args _)
@@ -328,7 +330,10 @@ Field values mirror through the UI-state store; views.save reads them."
       (when (and view (member rendering glasspane-views--renderings))
         (glasspane-views--set-rendering (alist-get 'name view) rendering)
         (glasspane-views--persist)
-        (jetpacs-shell-push)))))
+        (jetpacs-shell-push))))
+  :doc "Switch a saved view's rendering (list/board/calendar)."
+  :args '((:name name :type "text" :required t)
+          (:name rendering :type "enum" :values ["list" "board" "calendar"] :required t)))
 
 (jetpacs-defaction "views.save"
   (lambda (_args _)
@@ -378,7 +383,9 @@ Field values mirror through the UI-state store; views.save reads them."
         (when (equal glasspane-views--current name)
           (setq glasspane-views--current nil))
         (jetpacs-shell-notify (format "Deleted view %s" name))
-        (jetpacs-shell-push)))))
+        (jetpacs-shell-push))))
+  :doc "Delete a saved view by name."
+  :args '((:name name :type "text" :required t)))
 
 (provide 'glasspane-views)
 ;;; glasspane-views.el ends here

@@ -487,7 +487,9 @@ The one part of a timestamp the date-stamp chip can't display."
 (jetpacs-defaction "tasks.filter"
   (lambda (args _)
     (setq glasspane-ui--tasks-filter (alist-get 'filter args))
-    (jetpacs-shell-push)))
+    (jetpacs-shell-push))
+  :doc "Filter the tasks collection to a TODO keyword (or \"ALL\")."
+  :args '((:name filter :type "text" :required t)))
 
 (defun glasspane-ui--todo-keywords-apply (seqs)
   "Make SEQS the effective and persisted `org-todo-keywords'.

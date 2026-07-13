@@ -209,6 +209,8 @@ Returns \"\" when every filter is at its resting value."
     (jetpacs-ui-state-clear "search-filter-")
     (jetpacs-ui-state-put "search-filter-tags" (vector (alist-get 'tag args)))
     (glasspane-ui--run-search (glasspane-ui--search-filter-query))
-    (jetpacs-shell-push nil :switch-to "glasspane.search")))
+    (jetpacs-shell-push nil :switch-to "glasspane.search"))
+  :doc "Filter search to a single tag."
+  :args '((:name tag :type "text" :required t)))
 
 (provide 'glasspane-search)

@@ -26,6 +26,7 @@
 (require 'glasspane-srs)
 (require 'glasspane-gallery)
 (require 'glasspane-config)
+(require 'glasspane-pack)
 
 ;; Load the app-managed defaults (capture templates, agenda wiring) if
 ;; the user has opted in — init.el code after (require 'glasspane) still
