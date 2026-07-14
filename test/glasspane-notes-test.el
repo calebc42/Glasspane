@@ -188,4 +188,46 @@ link are skipped (the double-link guard)."
   (cl-letf (((symbol-function 'glasspane-notes-available-p) (lambda () nil)))
     (should (null (jetpacs-source-query "glasspane.notes" '((id . "x")))))))
 
+;; ─── Stale files (the vulpea half of the Review view) ───────────────────────
+
+(ert-deftest glasspane-notes-stale-section-dedupes-per-file ()
+  "One card per stale file, preferring the level-0 note's title; cards
+open via heading.tap.  Empty result renders the caught-up caption."
+  (jetpacs-tests--with-fake-vulpea nil
+    (cl-letf (((symbol-function 'vulpea-db-query-stale-notes)
+               ;; a.org (oldest) contributes a heading note AND its
+               ;; file-level note; b.org only a file-level note.
+               (lambda (_days)
+                 '((:id "h1" :title "A heading" :path "/v/a.org" :level 1)
+                   (:id "f1" :title "A file" :path "/v/a.org" :level 0)
+                   (:id "f2" :title "B file" :path "/v/b.org" :level 0))))
+              ((symbol-function 'vulpea-note-level)
+               (lambda (n) (plist-get n :level))))
+      (let* ((nodes (glasspane-notes-stale-section))
+             (json (json-serialize (jetpacs-tests--canon (apply #'jetpacs-column nodes))
+                                   :null-object :null :false-object :false)))
+        (should (string-search "Stale files" json))
+        (should (string-search "A file" json))
+        (should-not (string-search "A heading" json))
+        (should (string-search "B file" json))
+        (should (string-search "heading.tap" json))))
+    (cl-letf (((symbol-function 'vulpea-db-query-stale-notes) (lambda (_days) nil)))
+      (let* ((nodes (glasspane-notes-stale-section))
+             (json (json-serialize (jetpacs-tests--canon (apply #'jetpacs-column nodes))
+                                   :null-object :null :false-object :false)))
+        (should (string-search "Stale files" json))
+        (should (string-search "Nothing untouched" json))))))
+
+(ert-deftest glasspane-notes-stale-section-absent-without-vulpea ()
+  "No stale section when vulpea is missing or predates the stale query."
+  ;; vulpea missing entirely.
+  (cl-letf (((symbol-function 'glasspane-notes-available-p) (lambda () nil)))
+    (should-not (glasspane-notes-stale-section)))
+  ;; vulpea present but without vulpea-db-query-stale-notes: the fake
+  ;; helper stubs availability, not the stale query, so the fboundp
+  ;; guard is what must answer nil here.
+  (jetpacs-tests--with-fake-vulpea nil
+    (unless (fboundp 'vulpea-db-query-stale-notes)
+      (should-not (glasspane-notes-stale-section)))))
+
 (provide 'glasspane-notes-test)

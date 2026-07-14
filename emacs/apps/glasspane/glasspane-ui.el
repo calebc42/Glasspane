@@ -69,18 +69,11 @@ suppressed identical push would leave it frozen."
 
 (add-hook 'jetpacs-shell-refresh-hook #'glasspane-ui--forget-widget-memo)
 
-(defun glasspane-ui--review-view (snackbar)
-  (jetpacs-shell-tab-view "glasspane.review" (glasspane-ui--review-body)
-                       :snackbar snackbar))
-
 (defun glasspane-ui--settings-view (snackbar)
   (jetpacs-shell-nav-view "Settings" (glasspane-ui--settings-body)
                        :snackbar snackbar))
 
 (with-jetpacs-owner "glasspane"
-  (jetpacs-shell-define-view "glasspane.review" :builder #'glasspane-ui--review-view
-                          :tab '(:icon "rate_review" :label "Review") :order 25)
-
   (jetpacs-shell-define-view "glasspane.settings" :builder #'glasspane-ui--settings-view
                           :order 80))
 
@@ -92,7 +85,7 @@ suppressed identical push would leave it frozen."
 (jetpacs-defapp "glasspane" :label "Glasspane" :icon "event"
              :views '("glasspane.agenda" "glasspane.journal" "glasspane.tasks"
                       "glasspane.clock" "glasspane.search" "glasspane.views"
-                      "glasspane.srs" "glasspane.settings" "glasspane.detail"
+                      "glasspane.review" "glasspane.settings" "glasspane.detail"
                       "glasspane.gallery")
              :order 10)
 

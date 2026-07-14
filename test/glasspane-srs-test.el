@@ -13,7 +13,10 @@ zero due shows the caught-up empty state."
                   (jetpacs-tests--canon (glasspane-srs--view nil))
                   :null-object :null :false-object :false)))
       (should (string-search "3 items due" json))
-      (should (string-search "srs.review.start" json)))
+      (should (string-search "srs.review.start" json))
+      ;; The between-sessions body is the combined Review screen: the
+      ;; flashcard half rides under its own section header.
+      (should (string-search "Flashcards" json)))
     (jetpacs-org-cache-invalidate 'glasspane)
     (let* ((jetpacs-tests--srs-items nil)
            (json (json-serialize

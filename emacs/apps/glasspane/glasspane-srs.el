@@ -41,6 +41,7 @@
 (require 'jetpacs-shell)
 (require 'jetpacs-settings)
 (require 'glasspane-org)
+(require 'glasspane-notes)
 
 (declare-function org-srs-review-pending-items "org-srs-review")
 (declare-function org-srs-review-postpone "org-srs-review")
@@ -554,28 +555,45 @@ labelled menu rather than cluttering the bar."
                            (jetpacs-action "srs.quit" :when-offline "drop")
                            :content-description "End review"))))
 
+(defun glasspane-srs--review-body ()
+  "The between-sessions Review body: flashcards, then vulpea stale files.
+Stacked sections in one scroll — the flashcard half is small (a due
+count and the start button), so both halves show at once.  Each half
+degrades to its install prompt / to absent independently: org-srs
+missing must not blank the stale list, nor vice versa."
+  (let ((stale (glasspane-notes-stale-section)))
+    (apply #'jetpacs-lazy-column
+           (append
+            (list (jetpacs-section-header "Flashcards")
+                  (if (glasspane-srs-available-p)
+                      (glasspane-srs--idle-body)
+                    (glasspane-srs--install-body)))
+            (when stale
+              (cons (jetpacs-divider) stale))))))
+
 (defun glasspane-srs--view (snackbar)
   "The Review screen for the current session state."
   (jetpacs-shell-nav-view
    "Review"
-   (cond
-    ((not (glasspane-srs-available-p)) (glasspane-srs--install-body))
-    (glasspane-srs--active (glasspane-srs--session-body))
-    (t (glasspane-srs--idle-body)))
+   (if glasspane-srs--active
+       (glasspane-srs--session-body)
+     (glasspane-srs--review-body))
    :actions (when (and glasspane-srs--active glasspane-srs--current)
               (glasspane-srs--top-actions))
    :snackbar snackbar))
 
 (with-jetpacs-owner "glasspane"
-  (jetpacs-shell-define-view "glasspane.srs" :builder #'glasspane-srs--view :order 78))
+  (jetpacs-shell-define-view "glasspane.review" :builder #'glasspane-srs--view :order 78))
 
-;; Everyday nav (the drawer contract); no entry while org-srs is absent.
+;; Everyday nav (the drawer contract); no entry while both halves are
+;; absent (org-srs not installed AND no stale-capable vulpea).
 ;; The due count rides the drawer item's badge (memoised; nil when clear).
 (with-jetpacs-owner "glasspane"
   (jetpacs-shell-add-drawer-item
    45 (lambda ()
-        (when (glasspane-srs-available-p)
-          (jetpacs-drawer-item "school" "Review" (jetpacs-shell-switch-view "glasspane.srs")
+        (when (or (glasspane-srs-available-p)
+                  (glasspane-notes-stale-available-p))
+          (jetpacs-drawer-item "school" "Review" (jetpacs-shell-switch-view "glasspane.review")
                             :badge (let ((due (glasspane-srs--due-count)))
                                      (and (numberp due) (> due 0) due)))))))
 
@@ -588,7 +606,7 @@ labelled menu rather than cluttering the bar."
           (jetpacs-shell-notify "org-srs is not installed")
         (setq glasspane-srs--active t glasspane-srs--undo nil)
         (glasspane-srs--advance))
-      (jetpacs-shell-push nil :switch-to "glasspane.srs")))
+      (jetpacs-shell-push nil :switch-to "glasspane.review")))
 
   (jetpacs-defaction "srs.answer.show"
     (lambda (_args _)

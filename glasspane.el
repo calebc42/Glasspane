@@ -1823,18 +1823,11 @@ suppressed identical push would leave it frozen."
 
 (add-hook 'jetpacs-shell-refresh-hook #'glasspane-ui--forget-widget-memo)
 
-(defun glasspane-ui--review-view (snackbar)
-  (jetpacs-shell-tab-view "glasspane.review" (glasspane-ui--review-body)
-                       :snackbar snackbar))
-
 (defun glasspane-ui--settings-view (snackbar)
   (jetpacs-shell-nav-view "Settings" (glasspane-ui--settings-body)
                        :snackbar snackbar))
 
 (with-jetpacs-owner "glasspane"
-  (jetpacs-shell-define-view "glasspane.review" :builder #'glasspane-ui--review-view
-                          :tab '(:icon "rate_review" :label "Review") :order 25)
-
   (jetpacs-shell-define-view "glasspane.settings" :builder #'glasspane-ui--settings-view
                           :order 80))
 
@@ -1846,7 +1839,7 @@ suppressed identical push would leave it frozen."
 (jetpacs-defapp "glasspane" :label "Glasspane" :icon "event"
              :views '("glasspane.agenda" "glasspane.journal" "glasspane.tasks"
                       "glasspane.clock" "glasspane.search" "glasspane.views"
-                      "glasspane.srs" "glasspane.settings" "glasspane.detail"
+                      "glasspane.review" "glasspane.settings" "glasspane.detail"
                       "glasspane.gallery")
              :order 10)
 
@@ -6108,6 +6101,8 @@ the file is the source of truth for the `org/' id namespace."
 (declare-function vulpea-db-query-by-links-some "vulpea-db-query")
 (declare-function vulpea-db-query-by-ids "vulpea-db-query")
 (declare-function vulpea-db-get-by-id "vulpea-db-query")
+(declare-function vulpea-db-query-stale-notes "vulpea-db-query")
+(declare-function vulpea-note-level "vulpea-note")
 (declare-function vulpea-note-unlinked-mentions-async "vulpea-mentions")
 (declare-function vulpea-note-id "vulpea-note")
 (declare-function vulpea-note-title "vulpea-note")
@@ -6463,6 +6458,87 @@ must not nest a link inside a link."
 ;; The detail view splices this module's sections through the ui seam.
 (add-hook 'glasspane-ui-detail-nodes-functions #'glasspane-notes-detail-nodes)
 
+;; ─── Stale files: the vulpea half of the Review view ────────────────────────
+;; vulpea-db-query-stale-notes joins the files table's real mtime; a file
+;; leaves the list only when its content actually changes (a bare touch is
+;; skipped by vulpea's hash check at sync).  Tap opens the note — editing
+;; it is what marks it reviewed.
+
+(defcustom glasspane-notes-stale-days 90
+  "Days without modification before a note file counts as stale.
+The Review view lists these for a look-over."
+  :type 'integer :group 'jetpacs)
+
+(defconst glasspane-notes--stale-cap 20
+  "Stale files shown at once (the oldest); the rest wait their turn.")
+
+(defun glasspane-notes-stale-available-p ()
+  "Non-nil when the stale-files query is usable (vulpea new enough)."
+  (and (glasspane-notes-available-p)
+       (fboundp 'vulpea-db-query-stale-notes)))
+
+(defun glasspane-notes--stale-notes ()
+  "The oldest stale note per file, oldest file first, capped.
+The query returns every note in a stale file (heading-level notes
+share the file's mtime); one card per file is the useful grain, and
+the file-level (level 0) note names the file best when present."
+  (when (glasspane-notes-stale-available-p)
+    (condition-case nil
+        (let ((by-path (make-hash-table :test 'equal))
+              (order nil))
+          (dolist (note (vulpea-db-query-stale-notes glasspane-notes-stale-days))
+            (let* ((path (vulpea-note-path note))
+                   (seen (gethash path by-path)))
+              (unless seen (push path order))
+              (when (or (not seen)
+                        (eql 0 (ignore-errors (vulpea-note-level note))))
+                (puthash path note by-path))))
+          (seq-take (mapcar (lambda (p) (gethash p by-path)) (nreverse order))
+                    glasspane-notes--stale-cap))
+      (error nil))))
+
+(defun glasspane-notes--age-caption (path)
+  "\"modified N days/months/years ago\" from PATH's filesystem mtime, or nil."
+  (when-let* ((attrs (file-attributes path))
+              (days (floor (- (float-time)
+                              (float-time (file-attribute-modification-time attrs)))
+                           86400)))
+    (cond
+     ((< days 60) (format "modified %d days ago" days))
+     ((< days 730) (format "modified %d months ago" (floor days 30)))
+     (t (format "modified %d years ago" (floor days 365))))))
+
+(defun glasspane-notes--stale-card (note)
+  "A tappable card for stale NOTE: title, file, and how long untouched."
+  (let* ((title (vulpea-note-title note))
+         (path (vulpea-note-path note))
+         (ref (glasspane-notes--note-ref note))
+         (age (glasspane-notes--age-caption path)))
+    (jetpacs-card
+     (list (jetpacs-column
+            (jetpacs-text title 'body)
+            (jetpacs-text (concat (file-name-nondirectory path)
+                                  (when age (concat " · " age)))
+                       'caption)))
+     :on-tap (when ref
+               (jetpacs-action "heading.tap" :args ref :when-offline "drop")))))
+
+(defun glasspane-notes-stale-section ()
+  "Section nodes for the stale-files review, or nil when vulpea is absent."
+  (when (glasspane-notes-stale-available-p)
+    (let ((notes (glasspane-notes--stale-notes)))
+      (if (null notes)
+          (list (jetpacs-section-header "Stale files")
+                (jetpacs-text (format "Nothing untouched for %d+ days."
+                                   glasspane-notes-stale-days)
+                           'caption))
+        (append
+         (list (jetpacs-section-header "Stale files")
+               (jetpacs-text (format "Untouched for %d+ days — oldest first."
+                                  glasspane-notes-stale-days)
+                          'caption))
+         (mapcar #'glasspane-notes--stale-card notes))))))
+
 (provide 'glasspane-notes)
 ;;; glasspane-notes.el ends here
 
@@ -6513,6 +6589,7 @@ must not nest a link inside a link."
 (require 'jetpacs-shell)
 (require 'jetpacs-settings)
 (require 'glasspane-org)
+(require 'glasspane-notes)
 
 (declare-function org-srs-review-pending-items "org-srs-review")
 (declare-function org-srs-review-postpone "org-srs-review")
@@ -7026,28 +7103,45 @@ labelled menu rather than cluttering the bar."
                            (jetpacs-action "srs.quit" :when-offline "drop")
                            :content-description "End review"))))
 
+(defun glasspane-srs--review-body ()
+  "The between-sessions Review body: flashcards, then vulpea stale files.
+Stacked sections in one scroll — the flashcard half is small (a due
+count and the start button), so both halves show at once.  Each half
+degrades to its install prompt / to absent independently: org-srs
+missing must not blank the stale list, nor vice versa."
+  (let ((stale (glasspane-notes-stale-section)))
+    (apply #'jetpacs-lazy-column
+           (append
+            (list (jetpacs-section-header "Flashcards")
+                  (if (glasspane-srs-available-p)
+                      (glasspane-srs--idle-body)
+                    (glasspane-srs--install-body)))
+            (when stale
+              (cons (jetpacs-divider) stale))))))
+
 (defun glasspane-srs--view (snackbar)
   "The Review screen for the current session state."
   (jetpacs-shell-nav-view
    "Review"
-   (cond
-    ((not (glasspane-srs-available-p)) (glasspane-srs--install-body))
-    (glasspane-srs--active (glasspane-srs--session-body))
-    (t (glasspane-srs--idle-body)))
+   (if glasspane-srs--active
+       (glasspane-srs--session-body)
+     (glasspane-srs--review-body))
    :actions (when (and glasspane-srs--active glasspane-srs--current)
               (glasspane-srs--top-actions))
    :snackbar snackbar))
 
 (with-jetpacs-owner "glasspane"
-  (jetpacs-shell-define-view "glasspane.srs" :builder #'glasspane-srs--view :order 78))
+  (jetpacs-shell-define-view "glasspane.review" :builder #'glasspane-srs--view :order 78))
 
-;; Everyday nav (the drawer contract); no entry while org-srs is absent.
+;; Everyday nav (the drawer contract); no entry while both halves are
+;; absent (org-srs not installed AND no stale-capable vulpea).
 ;; The due count rides the drawer item's badge (memoised; nil when clear).
 (with-jetpacs-owner "glasspane"
   (jetpacs-shell-add-drawer-item
    45 (lambda ()
-        (when (glasspane-srs-available-p)
-          (jetpacs-drawer-item "school" "Review" (jetpacs-shell-switch-view "glasspane.srs")
+        (when (or (glasspane-srs-available-p)
+                  (glasspane-notes-stale-available-p))
+          (jetpacs-drawer-item "school" "Review" (jetpacs-shell-switch-view "glasspane.review")
                             :badge (let ((due (glasspane-srs--due-count)))
                                      (and (numberp due) (> due 0) due)))))))
 
@@ -7060,7 +7154,7 @@ labelled menu rather than cluttering the bar."
           (jetpacs-shell-notify "org-srs is not installed")
         (setq glasspane-srs--active t glasspane-srs--undo nil)
         (glasspane-srs--advance))
-      (jetpacs-shell-push nil :switch-to "glasspane.srs")))
+      (jetpacs-shell-push nil :switch-to "glasspane.review")))
 
   (jetpacs-defaction "srs.answer.show"
     (lambda (_args _)

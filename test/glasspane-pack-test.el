@@ -58,7 +58,7 @@ that loses its `with-jetpacs-owner' wrap silently drops out of the pack
     (should (equal "glasspane" (jetpacs--owner-of "action" name))))
   (dolist (view '("glasspane.review" "glasspane.settings" "glasspane.agenda"
                   "glasspane.detail" "glasspane.search" "glasspane.journal"
-                  "glasspane.views" "glasspane.srs" "glasspane.gallery"))
+                  "glasspane.views" "glasspane.gallery"))
     (should (equal "glasspane" (jetpacs--owner-of "view" view))))
   ;; And the owner-filtered manifest still carries the annotated ones
   ;; (only actions registered with :doc/:args metadata enter the catalog).
