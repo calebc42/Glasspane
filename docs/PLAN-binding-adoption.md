@@ -1,11 +1,21 @@
 # Plan: Stage 3 — Glasspane binding-layer adoption
 
-**Handoff for a fresh chat (written 2026-07-13).** This is Stage 3 of the
-three-repo binding-layer refactor. Stages 0–2 (the jetpacs foundation) are
-**done and merged into jetpacs `main`** (api **1.5.0**), pending a push. This
-plan adopts that new core here in Glasspane: express the data-bound surfaces as
-declarative `:spec` views over a registered engine **source**, drop the last
-internal-API pokes, and ship a `glasspane-pack.json` the composer can bind to.
+**STATUS (2026-07-13): EXECUTED, in re-scoped form.** What landed on `main`
+(commits `07cd2d4`…`e45c160`): the `glasspane.org` defsource with a
+canonicalizer (S3.1), the four internal-poke drops onto the promoted 1.5.0
+seams (S3.3), the vulpea-backed `glasspane.notes` source, the annotated
+action catalog + `glasspane-pack.el` + dependency-aware `glasspane-pack.json`
+(S3.7), and agenda capability fallbacks via `jetpacs-node-or`. The planned
+`:spec` migrations of the rich card surfaces (S3.2/S3.4/S3.5/S3.6) were
+**dropped by design** — see
+[DECISION-no-binding-template-dsl.md](DECISION-no-binding-template-dsl.md):
+rich rendering stays in elisp `:builder`s; `:spec` is the composer-facing
+grammar, not a Tier-1 replication target. Task 21 and the submodule bump
+landed too (`edf5eb7`, `edeba78`; the pin has since moved to api 1.6.0).
+**org-adoption remains pending** —
+[PLAN-glasspane-org-adoption.md](PLAN-glasspane-org-adoption.md) is the
+executable plan. Everything below is the original handoff, kept as the
+design record; its "current state" snapshot is historical.
 
 The master plan (in the jetpacs repo) is `jetpacs/docs/PLAN-binding-layer.md`
 (Stage 3 section). The binding **grammar** reference is `jetpacs/docs/BINDING.md`
@@ -13,7 +23,7 @@ The master plan (in the jetpacs repo) is `jetpacs/docs/PLAN-binding-layer.md`
 
 ---
 
-## Current state of THIS repo (verified 2026-07-13 — do not trust blindly, re-check)
+## Current state of THIS repo (HISTORICAL — the snapshot this plan started from)
 
 The working tree is **not clean** and org-adoption has **not** run yet:
 

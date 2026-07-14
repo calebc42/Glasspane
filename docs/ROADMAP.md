@@ -1,6 +1,6 @@
 # Roadmap — the Glasspane app
 
-**STATUS (2026-07-09): current.** This is the *app* roadmap: the
+**STATUS (2026-07-13): current.** This is the *app* roadmap: the
 Glasspane org experience and the reference Tier-1 apps bundled with it.
 The **foundation roadmap** — the wire, the core elisp, the renderer
 library, the companion shell — lives with the
@@ -25,8 +25,21 @@ vulpea (PKM 3–4); saved org-ql queries as table/board/calendar views
 (PKM 11); org-defined automations (AUTO 13); the sparse filter; the SRS
 review skin over org-srs.
 
+Since then the **binding-layer adoption** landed in re-scoped form
+([PLAN-binding-adoption.md](PLAN-binding-adoption.md) has the status;
+[DECISION-no-binding-template-dsl.md](DECISION-no-binding-template-dsl.md)
+the why): Glasspane now exposes engine **sources** (`glasspane.org`,
+vulpea-backed `glasspane.notes`), an annotated action catalog, and
+`glasspane-pack.json` for the composer, while rich cards stay
+`:builder`s.
+
 What that leaves is **debt, not features**:
 
+0. **org-adoption** — rip the duplicated query/cache/ref/mutation logic
+   out of `glasspane-org.el` and stand on the core's `jetpacs-org-*`
+   (now including the guarded vulpea note path, api 1.6.0).
+   [PLAN-glasspane-org-adoption.md](PLAN-glasspane-org-adoption.md) is
+   the executable plan, prerequisites refreshed 2026-07-13.
 1. **On-device acceptance.** Most of the automation/trigger/journal
    work has never had its acceptance pass on real hardware. The full
    pending list is [TESTING-ON-DEVICE.md](TESTING-ON-DEVICE.md) — this

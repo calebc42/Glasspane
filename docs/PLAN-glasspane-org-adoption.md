@@ -1,35 +1,47 @@
 # Plan: Adopt `jetpacs-org` core primitives in Glasspane
 
+**STATUS (2026-07-13): decided, not run; prerequisites REFRESHED below.**
+
 Execute the Glasspane half of `jetpacs/docs/PLAN-org-extraction.md` §1: rip the
 duplicated org logic out of `glasspane-org.el` and stand the app on the
-foundation's new `jetpacs-org` primitive layer. This is a **full refactor across
+foundation's `jetpacs-org` primitive layer. This is a **full refactor across
 all 11 files** (no compatibility wrappers), and it **keeps Glasspane's vulpea
-query path** (vulpea is Glasspane's app-specific indexed-query opinion, correctly
-*not* in the unopinionated core).
+query path** app-side as the app's indexed-query opinion.
 
 > Both of those choices (keep vulpea; full 11-file refactor) were decided by the
 > user. Do not deviate without asking.
+>
+> **2026-07-13 amendment (owner-approved):** the core now carries a *guarded*
+> vulpea read path — api **1.6.0** ships `jetpacs-org-note-matches-p` (the one
+> query grammar over a `vulpea-note`), `jetpacs-org-note-query-supported-p`,
+> and `jetpacs-org-vulpea-available-p` / `-source-notes` / `-query` (the core
+> never requires vulpea; the probe gates). Where this refactor touches
+> Glasspane's vulpea-backed matching or note-scope queries, **consume those
+> canonical functions instead of keeping private equivalents** — "keep vulpea
+> app-side" now means Glasspane keeps its vulpea *policy* (autosync, DB
+> location, which surfaces are index-backed), not a private copy of the
+> grammar. The composer already made this move (its `jetpacs-crud.el` deleted
+> its matcher); `glasspane-source.el` / `glasspane-notes.el` should end up in
+> the same shape.
 
 ---
 
-## 0. Current state / prerequisites (already done — just verify)
+## 0. Current state / prerequisites (REFRESHED 2026-07-13 — verify, don't trust)
 
-- **jetpacs main = `f4cb47a`** on origin (`git@github.com:calebc42/jetpacs.git`).
-  It ships `jetpacs-org.el` — the unopinionated org primitive layer. Its public
-  API is stable (see §2). jetpacs suite is green (100/100).
-- **Glasspane's `jetpacs/` submodule was bumped to `f4cb47a`** in the working
-  tree (it was pinned at `d079b7a`, which lacked `jetpacs-config`/`jetpacs-org`
-  and could not even load Glasspane's own suite). Verify:
-  ```
-  git -C ~/pkb/projects/Glasspane/jetpacs log --oneline -1     # -> f4cb47a
-  ls ~/pkb/projects/Glasspane/jetpacs/emacs/core/jetpacs-org.el
-  ```
-  The bump is **uncommitted** in the superproject — record it (`git add jetpacs`)
-  as part of the final commit. `f4cb47a` is on origin, so the pointer is shareable.
-  - The submodule fetch over SSH failed inside WSL (no GitHub creds there); it was
-    fetched locally from the Windows clone: `git -C jetpacs fetch
-    /mnt/c/Users/caleb/AndroidStudioProjects/jetpacs main && git checkout f4cb47a`.
-- **Baseline: 78/78 green** against the bumped submodule.
+- **jetpacs main = `5c84a68`** (api **1.6.0**; local Windows clone at
+  `/mnt/c/Users/caleb/AndroidStudioProjects/jetpacs`, push to origin may
+  still be pending — check). It ships `jetpacs-org.el` including the
+  note-accessor batch. jetpacs suite: 136/136 + 54/54 primitives + core guard.
+- **Glasspane's `jetpacs/` submodule is at `5c84a68`** (bumped from `40d4972`;
+  fetch over SSH fails inside WSL — no GitHub creds — so fetch from the
+  Windows clone: `git -C jetpacs fetch
+  /mnt/c/Users/caleb/AndroidStudioProjects/jetpacs main && git checkout FETCH_HEAD`).
+- **Baseline: 91/91 green** against the bumped submodule.
+- **Since this plan was first written, Stage-3 binding adoption landed**
+  (`07cd2d4`…`e45c160`): `glasspane-org.el` now also registers the
+  `glasspane.org` defsource, and `glasspane-source.el` / `glasspane-pack.el`
+  exist. **Re-grep every symbol and line number below before editing** — the
+  poke/query call sites have moved.
 
 ## 1. Test gate (how to run — this is the loop)
 
@@ -41,7 +53,7 @@ wsl -d Debian -- bash -lc 'cd ~/pkb/projects/Glasspane && bash test/run-tests.sh
 ```
 
 `test/run-tests.sh` loads the app from `emacs/apps/glasspane`, core from
-`jetpacs/emacs/core`, and runs all `glasspane-*-test.el`. **Baseline 78/78 must
+`jetpacs/emacs/core`, and runs all `glasspane-*-test.el`. **Baseline 91/91 must
 stay green after every phase.** Windows Emacs cannot run this suite (no
 vulpea/org-ql/magit/ghostel).
 
