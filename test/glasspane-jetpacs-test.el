@@ -38,6 +38,34 @@
             (should (string-search "Interesting bit." content))))
       (delete-file file))))
 
+(ert-deftest jetpacs-capture-submit-reads-form-and-rotates ()
+  "org.capture.submit reads its fields through the capture `jetpacs-form'
+and resets it — rotating the ids so stale device-side field state
+can't resurface in the next capture."
+  (let ((jetpacs--forms (make-hash-table :test 'equal))
+        (jetpacs--ui-state (make-hash-table :test 'equal))
+        (glasspane-ui--shared-text nil)
+        (glasspane-ui--shared-subject nil)
+        (recorded nil))
+    (cl-letf (((symbol-function 'glasspane-org--capture-templates)
+               (lambda () '(((key . "t") (description . "Task")
+                             (prompts . ["Headline" "Notes"])))))
+              ((symbol-function 'glasspane-org--do-capture)
+               (lambda (key values &optional _body)
+                 (setq recorded (cons key values))))
+              ((symbol-function 'jetpacs-shell-push)
+               (cl-function (lambda (&optional _tab &key _switch-to)))))
+      ;; Values arrive as state.changed events keyed by the gen-0 ids.
+      (jetpacs-ui-state-put "cap-Headline-0" "Buy milk")
+      (jetpacs-ui-state-put "cap-Notes-0" "2% fat")
+      (jetpacs--on-action '((action . "org.capture.submit")
+                         (args . ((key . "t")))) nil)
+      (should (equal recorded '("t" ("Headline" . "Buy milk")
+                                ("Notes" . "2% fat"))))
+      ;; The submit reset the form: ids rotated, values gone.
+      (should (= 1 (jetpacs-form-gen (glasspane-capture--form))))
+      (should-not (jetpacs-ui-state "cap-Headline-0")))))
+
 ;; ─── Reminders ──────────────────────────────────────────────────────────────
 
 (ert-deftest jetpacs-upcoming-reminders ()

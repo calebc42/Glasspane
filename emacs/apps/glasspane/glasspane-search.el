@@ -43,6 +43,13 @@ worked example of the query language.  Each filter lives in its own
 collapsible section whose header names the active value, so the
 folded builder reads as a filter summary.  The whole card starts
 folded once a search has results, to keep them above the fold."
+  ;; Deliberately raw `jetpacs-ui-state', not a `jetpacs-form': the
+  ;; search-filter-* ids are stable identities whose values must persist
+  ;; across pushes and view switches (that persistence IS the feature —
+  ;; the section summaries and search.clear-filters' prefix clear depend
+  ;; on it), and every render re-seeds the widgets with an explicit
+  ;; :value, so the device-side staleness that form gen-rotation cures
+  ;; cannot occur here.
   (let* ((todo-val (or (car (jetpacs-ui-state-list "search-filter-todo")) "Any"))
          (tags-list (jetpacs-ui-state-list "search-filter-tags"))
          (text-val (or (jetpacs-ui-state "search-filter-text") ""))

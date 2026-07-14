@@ -106,23 +106,32 @@ the tile picker."
     (error
      (message "Jetpacs capture dialog error: %s" (error-message-string err)))))
 
+(defun glasspane-capture--form ()
+  "The capture dialog's field registry (`jetpacs-form').
+Reset before each dialog and after each submit: rotating the field ids
+keeps a previous capture's device-side field state from resurfacing."
+  (jetpacs-form "cap" "glasspane"))
+
 (defun glasspane-ui-show-capture-form (template-key)
   ;; Forget values from any previous capture so they can't leak into
-  ;; this submit (`jetpacs--ui-state' is global and persistent).
-  (jetpacs-ui-state-clear "cap-")
+  ;; this submit — the reset also rotates the field ids, so stale
+  ;; device-side field state can't resurface either.
+  (jetpacs-form-reset (glasspane-capture--form))
   ;; A shared-in subject pre-fills the Headline field; it must also land
   ;; in UI state, since state.changed only fires for edits the user makes.
   (when glasspane-ui--shared-subject
-    (jetpacs-ui-state-put "cap-Headline" glasspane-ui--shared-subject))
+    (jetpacs-form-seed (glasspane-capture--form) "Headline"
+                       glasspane-ui--shared-subject))
   (condition-case err
-      (let* ((templates (glasspane-org--capture-templates))
+      (let* ((form (glasspane-capture--form))
+             (templates (glasspane-org--capture-templates))
              (tmpl (cl-find-if
                     (lambda (t-info) (equal (alist-get 'key t-info) template-key))
                     templates))
              (prompts (append (alist-get 'prompts tmpl) nil)) ;; coerce vector to list
              (inputs (mapcar (lambda (p)
                                (jetpacs-text-input
-                                (format "cap-%s" p) :label p
+                                (jetpacs-form-field-id form p) :label p
                                 :value (and (equal p "Headline")
                                             glasspane-ui--shared-subject)))
                              prompts))
@@ -191,16 +200,17 @@ appears on the next replay."
                  (prompts (append (alist-get 'prompts tmpl) nil))
                  ;; Field values arrived earlier as state.changed events and
                  ;; were recorded into `jetpacs--ui-state' by jetpacs-surfaces.
+                 (form (glasspane-capture--form))
                  (values (mapcar
                           (lambda (p)
-                            (let ((v (jetpacs-ui-state (format "cap-%s" p))))
+                            (let ((v (jetpacs-form-value form p)))
                               (cons p (if (stringp v) v ""))))
                           prompts)))
             (glasspane-org--do-capture key values glasspane-ui--shared-text)
             (setq glasspane-ui--shared-text nil
                   glasspane-ui--shared-subject nil)
             (jetpacs-org-cache-invalidate 'glasspane)
-            (jetpacs-ui-state-clear "cap-")
+            (jetpacs-form-reset form)
             (jetpacs-shell-notify "Captured ✓")
             (jetpacs-dismiss-dialog)
             (jetpacs-shell-push))
@@ -208,7 +218,7 @@ appears on the next replay."
          (message "Jetpacs capture submit error: %s" (error-message-string err))
          (setq glasspane-ui--shared-text nil
                glasspane-ui--shared-subject nil)
-         (jetpacs-ui-state-clear "cap-")
+         (jetpacs-form-reset (glasspane-capture--form))
          (jetpacs-dismiss-dialog))))))
 
 (provide 'glasspane-capture)
