@@ -27,6 +27,29 @@
       (should (string-search "Unscheduled" json))
       (should (string-search "Ship it" json)))))
 
+(ert-deftest glasspane-views-rich-cards ()
+  "Cards and cells carry priority badges, strike-through, and tappable
+tags; card renderings compose the todo · file caption; every rendering
+lints clean under the 1.11 node schema."
+  (let ((items (jetpacs-tests--views-items))
+        (org-todo-keywords-1 '("TODO" "NEXT" "DONE")))
+    (let ((table (glasspane-views--table-node items))
+          (board (glasspane-views--board-node items))
+          (calendar (apply #'jetpacs-column
+                           (glasspane-views--calendar-nodes items))))
+      (should-not (jetpacs-lint-spec table))
+      (should-not (jetpacs-lint-spec board))
+      (should-not (jetpacs-lint-spec calendar))
+      (dolist (node (list table board calendar))
+        (let ((json (json-serialize (jetpacs-tests--canon node)
+                                    :null-object :null :false-object :false)))
+          (should (string-search "[A] " json))      ; priority badge
+          (should (string-search "strike" json))    ; done → struck through
+          (should (string-search "search.by-tag" json)))) ; tappable tags
+      (let ((json (json-serialize (jetpacs-tests--canon board)
+                                  :null-object :null :false-object :false)))
+        (should (string-search "a.org" json))))))   ; caption file basename
+
 (ert-deftest glasspane-views-board-includes-file-local-keywords ()
   "A TODO state the global keyword list doesn't know still gets a
 column — cards with file-local #+TODO: keywords must not silently

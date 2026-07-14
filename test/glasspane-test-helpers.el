@@ -342,7 +342,14 @@ Only run this after an INTENTIONAL wire-format change; review the diff."
      (ref . ((file . "/tmp/a.org") (pos . 1) (headline . "Write spec"))))
     ((headline . "Ship it") (todo . "NEXT") (tags . [])
      (scheduled . nil)
-     (ref . ((file . "/tmp/a.org") (pos . 50) (headline . "Ship it"))))))
+     (ref . ((file . "/tmp/a.org") (pos . 50) (headline . "Ship it"))))
+    ;; Done + priority + deadline + file: exercises the rich-card path
+    ;; (badge, strike-through, caption, date row).  Appended — earlier
+    ;; assertions depend on the first two items staying as they are.
+    ((headline . "Old chore") (todo . "DONE") (priority . "A")
+     (tags . ["home"]) (scheduled . nil) (deadline . "<2026-07-01 Wed>")
+     (file . "/tmp/a.org") (pos . 90)
+     (ref . ((file . "/tmp/a.org") (pos . 90) (headline . "Old chore"))))))
 
 ;; ─── Org-defined automations (AUTO Task 13) ──────────────────────────────────
 

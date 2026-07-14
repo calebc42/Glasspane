@@ -74,6 +74,83 @@ mutates the value Customize handed out."
   (jetpacs-action "heading.tap" :args (alist-get 'ref item)
                :when-offline "drop"))
 
+(defun glasspane-views--done-p (item)
+  "Non-nil when ITEM's todo keyword is a done state."
+  (let ((todo (alist-get 'todo item)))
+    (and todo (member todo (or (default-value 'org-done-keywords)
+                               '("DONE" "CANCELLED"))))))
+
+(defconst glasspane-views--priority-colors
+  '(("A" . "#E53935") ("B" . "#F57C00") ("C" . "#1976D2"))
+  "Badge color per priority; anything else renders neutral gray.")
+
+(defun glasspane-views--priority-span (priority)
+  "The bold colored [P] badge span, or nil without PRIORITY."
+  (when priority
+    (jetpacs-span (format "[%s] " priority) :bold t
+               :color (or (cdr (assoc priority glasspane-views--priority-colors))
+                          "#9E9E9E"))))
+
+(defun glasspane-views--headline-spans (item)
+  "Priority badge + headline spans; done headings render struck through.
+One span list feeds both table cells and `jetpacs-rich-text' cards."
+  (let ((headline (or (alist-get 'headline item) "")))
+    (delq nil
+          (list (glasspane-views--priority-span (alist-get 'priority item))
+                (if (glasspane-views--done-p item)
+                    (jetpacs-span headline :strike t)
+                  (jetpacs-span headline))))))
+
+(defun glasspane-views--tag-action (tag)
+  "The tap action shared by tag spans and chips: search by TAG."
+  (jetpacs-action "search.by-tag" :args `((tag . ,tag))))
+
+(defun glasspane-views--tag-spans (item)
+  "Tappable #tag spans for the list rendering's Tags cell."
+  (let (spans)
+    (dolist (tg (append (alist-get 'tags item) nil))
+      (when spans (push (jetpacs-span " ") spans))
+      (push (jetpacs-span (concat "#" tg) :tag t
+                       :on-tap (glasspane-views--tag-action tg))
+            spans))
+    (nreverse spans)))
+
+(defun glasspane-views--tag-chips (item)
+  "The tappable tag chip row for card renderings, or nil without tags."
+  (when-let ((tags (append (alist-get 'tags item) nil)))
+    (apply #'jetpacs-flow-row
+           (mapcar (lambda (tg)
+                     (jetpacs-assist-chip tg :on-tap (glasspane-views--tag-action tg)))
+                   tags))))
+
+(defun glasspane-views--caption (item)
+  "The todo · file caption line, or nil when neither is known."
+  (let ((caption (string-join
+                  (delq nil (list (alist-get 'todo item)
+                                  (when-let ((file (alist-get 'file item)))
+                                    (file-name-nondirectory file))))
+                  "  ·  ")))
+    (unless (string-empty-p caption) caption)))
+
+(defun glasspane-views--card (item &optional trailing)
+  "The shared rich card for ITEM; TRAILING sits at the row's end.
+Priority-badged headline (struck through when done), todo · file
+caption, compact scheduled/deadline row, tappable tag chips."
+  (let ((middle
+         (apply #'jetpacs-column
+                (delq nil
+                      (list
+                       (jetpacs-rich-text (glasspane-views--headline-spans item))
+                       (when-let ((caption (glasspane-views--caption item)))
+                         (jetpacs-text caption 'caption))
+                       (glasspane-ui--card-date-row item)
+                       (glasspane-views--tag-chips item))))))
+    (jetpacs-card
+     (list (apply #'jetpacs-row
+                  (delq nil (list (jetpacs-box (list middle) :weight 1)
+                                  trailing))))
+     :on-tap (glasspane-views--tap item))))
+
 (defun glasspane-views--table-node (items)
   "The list rendering: one table row per item, tappable cells."
   (jetpacs-table
@@ -88,19 +165,16 @@ mutates the value Customize handed out."
      (lambda (item)
        (let ((tap (glasspane-views--tap item)))
          (jetpacs-table-row
-          (list (jetpacs-table-cell
-                 (list (jetpacs-span (or (alist-get 'headline item) "")))
-                 :on-tap tap)
+          (list (jetpacs-table-cell (glasspane-views--headline-spans item)
+                                 :on-tap tap)
                 (jetpacs-table-cell
-                 (list (jetpacs-span (or (alist-get 'todo item) ""))))
+                 (list (jetpacs-span (or (alist-get 'todo item) "")
+                                  :strike (and (glasspane-views--done-p item) t))))
                 (jetpacs-table-cell
                  (list (jetpacs-span (or (glasspane-ui--ts-date
                                        (alist-get 'scheduled item))
                                       ""))))
-                (jetpacs-table-cell
-                 (list (jetpacs-span (mapconcat #'identity
-                                             (append (alist-get 'tags item) nil)
-                                             " "))))))))
+                (jetpacs-table-cell (glasspane-views--tag-spans item))))))
      items))
    :aligns '("start" "start" "start" "start")))
 
@@ -125,21 +199,17 @@ vanish from the board."
   "A board card: tap opens the heading; the menu moves it to a column."
   (let ((ref (alist-get 'ref item))
         (state (or (alist-get 'todo item) "")))
-    (jetpacs-card
-     (list
-      (jetpacs-row
-       (jetpacs-box (list (jetpacs-text (or (alist-get 'headline item) "") 'body))
-                 :weight 1)
-       (jetpacs-menu
-        (mapcar (lambda (target)
-                  (jetpacs-menu-item
-                   (if (string-empty-p target) "No state" target)
-                   (jetpacs-action "heading.todo-set"
-                                :args (append ref `((state . ,target)))
-                                :when-offline "queue")))
-                (remove state columns))
-        :icon "more_vert")))
-     :on-tap (glasspane-views--tap item))))
+    (glasspane-views--card
+     item
+     (jetpacs-menu
+      (mapcar (lambda (target)
+                (jetpacs-menu-item
+                 (if (string-empty-p target) "No state" target)
+                 (jetpacs-action "heading.todo-set"
+                              :args (append ref `((state . ,target)))
+                              :when-offline "queue")))
+              (remove state columns))
+      :icon "more_vert"))))
 
 (defun glasspane-views--board-node (items)
   "The kanban rendering: one column per TODO state, panning sideways."
@@ -183,15 +253,7 @@ vanish from the board."
                (cons (jetpacs-section-header
                       (if (string-empty-p date) "Unscheduled"
                         (glasspane-ui--format-date date "%a, %b %e")))
-                     (mapcar (lambda (item)
-                               (jetpacs-card
-                                (list (jetpacs-text
-                                       (format "%s%s"
-                                               (if-let ((todo (alist-get 'todo item)))
-                                                   (concat todo " ") "")
-                                               (or (alist-get 'headline item) ""))
-                                       'body))
-                                :on-tap (glasspane-views--tap item)))
+                     (mapcar #'glasspane-views--card
                              (nreverse (gethash date buckets))))))))
 
 ;; ─── The two screens (one shell view) ────────────────────────────────────────
