@@ -116,18 +116,19 @@ via `glasspane-config-sync'; an existing one is only loaded, never
 rewritten."
   (jetpacs-app-config-ensure glasspane-config-app-id glasspane-config--files))
 
-(jetpacs-defaction "config.sync"
-  ;; Allowlisted and argument-free: rewrites the fixed file set into
-  ;; Glasspane's config subtree — nothing on the wire chooses paths or
-  ;; content.
-  (lambda (_ _)
-    (let ((dir (glasspane-config-sync)))
-      (when (fboundp 'jetpacs-shell-notify)
-        (jetpacs-shell-notify
-         (format "App defaults refreshed in %s"
-                 (abbreviate-file-name dir)))))
-    (when (fboundp 'jetpacs-shell-push)
-      (jetpacs-shell-push))))
+(with-jetpacs-owner "glasspane"
+  (jetpacs-defaction "config.sync"
+    ;; Allowlisted and argument-free: rewrites the fixed file set into
+    ;; Glasspane's config subtree — nothing on the wire chooses paths or
+    ;; content.
+    (lambda (_ _)
+      (let ((dir (glasspane-config-sync)))
+        (when (fboundp 'jetpacs-shell-notify)
+          (jetpacs-shell-notify
+           (format "App defaults refreshed in %s"
+                   (abbreviate-file-name dir)))))
+      (when (fboundp 'jetpacs-shell-push)
+        (jetpacs-shell-push)))))
 
 (provide 'glasspane-config)
 ;;; glasspane-config.el ends here

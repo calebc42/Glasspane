@@ -44,6 +44,31 @@
       (should (member "heading.tap" actions))
       (should (member "heading.todo-set" actions)))))
 
+(ert-deftest glasspane-pack-registrations-owner-scoped ()
+  "Every module's registrations are attributed to the glasspane owner.
+The manifest ships (jetpacs-action-catalog \"glasspane\"), so an action
+that loses its `with-jetpacs-owner' wrap silently drops out of the pack
+— one tripwire action and view per module pins the attribution."
+  (dolist (name '("heading.tap" "settings.todo.save" "org.capture.submit"
+                  "org.search.run" "org.table.edit" "org.footnote.show"
+                  "journal.capture" "views.save" "notes.mentions"
+                  "link.materialize" "srs.rate" "demo.gallery"
+                  "org.clock.out" "demo.setup" "config.sync"
+                  "checkbox.toggle" "agenda.nav"))
+    (should (equal "glasspane" (jetpacs--owner-of "action" name))))
+  (dolist (view '("glasspane.review" "glasspane.settings" "glasspane.agenda"
+                  "glasspane.detail" "glasspane.search" "glasspane.journal"
+                  "glasspane.views" "glasspane.srs" "glasspane.gallery"))
+    (should (equal "glasspane" (jetpacs--owner-of "view" view))))
+  ;; And the owner-filtered manifest still carries the annotated ones
+  ;; (only actions registered with :doc/:args metadata enter the catalog).
+  (let ((actions (mapcar (lambda (a) (alist-get 'action a))
+                         (append (alist-get 'actions (glasspane-pack-manifest))
+                                 nil))))
+    (should (member "heading.tap" actions))
+    (should (member "views.delete" actions))
+    (should (member "journal.capture" actions))))
+
 (ert-deftest glasspane-pack-manifest-matches-snapshot ()
   "The committed glasspane-pack.json equals the live manifest (regen-and-assert).
 If this fails, run `emacs --batch -l emacs/build-pack.el' and commit the diff."

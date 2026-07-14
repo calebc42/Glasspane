@@ -94,22 +94,23 @@ Reads the memoised day extraction, so a push recomputes nothing; nil
                      (error nil)))))
     (and (> n 0) n)))
 
-(jetpacs-shell-define-view "glasspane.agenda" :builder #'glasspane-ui--agenda-view
-                        :tab '(:icon "event" :label "Agenda"
-                               :badge glasspane-ui--agenda-badge)
-                        :order 10)
+(with-jetpacs-owner "glasspane"
+  (jetpacs-shell-define-view "glasspane.agenda" :builder #'glasspane-ui--agenda-view
+                          :tab '(:icon "event" :label "Agenda"
+                                 :badge glasspane-ui--agenda-badge)
+                          :order 10)
 
-(jetpacs-shell-define-view "glasspane.tasks" :builder #'glasspane-ui--tasks-view
-                        :tab '(:icon "checklist" :label "Tasks") :order 20)
+  (jetpacs-shell-define-view "glasspane.tasks" :builder #'glasspane-ui--tasks-view
+                          :tab '(:icon "checklist" :label "Tasks") :order 20)
 
-;; The clock lost its tab 2026-07-06 (user decision: six tabs was
-;; crowded and the screen alone felt barren) — its body now renders as
-;; a section of the Journal view.  The view stays registered so cached
-;; `view.switch' targets from older pushes still resolve.  (Targets
-;; cached before the 2026-07-10 "glasspane." namespacing name the bare
-;; views and drop harmlessly; one fresh push re-caches.)
-(jetpacs-shell-define-view "glasspane.clock" :builder #'glasspane-ui--clock-view
-                        :order 30)
+  ;; The clock lost its tab 2026-07-06 (user decision: six tabs was
+  ;; crowded and the screen alone felt barren) — its body now renders as
+  ;; a section of the Journal view.  The view stays registered so cached
+  ;; `view.switch' targets from older pushes still resolve.  (Targets
+  ;; cached before the 2026-07-10 "glasspane." namespacing name the bare
+  ;; views and drop harmlessly; one fresh push re-caches.)
+  (jetpacs-shell-define-view "glasspane.clock" :builder #'glasspane-ui--clock-view
+                          :order 30))
 
 ;; ─── Tab Bodies ──────────────────────────────────────────────────────────────
 
@@ -489,12 +490,13 @@ The one part of a timestamp the date-stamp chip can't display."
              (string-match "\\([.+]?\\+[0-9]+[hdwmy]\\)" ts))
     (match-string 1 ts)))
 
-(jetpacs-defaction "tasks.filter"
-  (lambda (args _)
-    (setq glasspane-ui--tasks-filter (alist-get 'filter args))
-    (jetpacs-shell-push))
-  :doc "Filter the tasks collection to a TODO keyword (or \"ALL\")."
-  :args '((:name filter :type "text" :required t)))
+(with-jetpacs-owner "glasspane"
+  (jetpacs-defaction "tasks.filter"
+    (lambda (args _)
+      (setq glasspane-ui--tasks-filter (alist-get 'filter args))
+      (jetpacs-shell-push))
+    :doc "Filter the tasks collection to a TODO keyword (or \"ALL\")."
+    :args '((:name filter :type "text" :required t))))
 
 (defun glasspane-ui--todo-keywords-apply (seqs)
   "Make SEQS the effective and persisted `org-todo-keywords'.
@@ -510,78 +512,79 @@ with the new states.  Returns non-nil when persisting succeeded."
   (jetpacs-org-cache-invalidate 'glasspane)
   (jetpacs-settings-save-variable 'org-todo-keywords seqs))
 
-(jetpacs-defaction "settings.todo.save"
-  (lambda (args _)
-    (let* ((idx (alist-get 'index args))
-           (type (intern (alist-get 'type args)))
-           (parse (lambda (id)
-                    (delq nil
-                          (mapcar (lambda (x)
-                                    (let ((x (replace-regexp-in-string "^[ \t\n\r]+\\|[ \t\n\r]+$" "" x)))
-                                      (if (equal x "") nil x)))
-                                  (split-string (or (jetpacs-ui-state id) "") ",")))))
-           (active (funcall parse "todo-active"))
-           (finished (funcall parse "todo-finished"))
-           (seqs (copy-sequence (or (default-value 'org-todo-keywords) '((sequence "TODO" "DONE")))))
-           (new-seq (append (list type) active (when finished (cons "|" finished)))))
-      (cond
-       ((and (null active) (null finished))
-        (jetpacs-shell-notify "A sequence needs at least one state"))
-       ((>= idx (length seqs))
-        ;; Stale index: the list changed since the dialog was built.
-        (jetpacs-shell-notify "Sequences changed underneath; reopen the editor")
-        (jetpacs-dismiss-dialog)
-        (jetpacs-shell-push))
-       (t
-        (if (>= idx 0)
-            (setcar (nthcdr idx seqs) new-seq)
-          (setq seqs (append seqs (list new-seq))))
-        (when (glasspane-ui--todo-keywords-apply seqs)
-          (jetpacs-shell-notify "TODO sequence saved"))
-        (jetpacs-dismiss-dialog)
-        (jetpacs-shell-push))))))
+(with-jetpacs-owner "glasspane"
+  (jetpacs-defaction "settings.todo.save"
+    (lambda (args _)
+      (let* ((idx (alist-get 'index args))
+             (type (intern (alist-get 'type args)))
+             (parse (lambda (id)
+                      (delq nil
+                            (mapcar (lambda (x)
+                                      (let ((x (replace-regexp-in-string "^[ \t\n\r]+\\|[ \t\n\r]+$" "" x)))
+                                        (if (equal x "") nil x)))
+                                    (split-string (or (jetpacs-ui-state id) "") ",")))))
+             (active (funcall parse "todo-active"))
+             (finished (funcall parse "todo-finished"))
+             (seqs (copy-sequence (or (default-value 'org-todo-keywords) '((sequence "TODO" "DONE")))))
+             (new-seq (append (list type) active (when finished (cons "|" finished)))))
+        (cond
+         ((and (null active) (null finished))
+          (jetpacs-shell-notify "A sequence needs at least one state"))
+         ((>= idx (length seqs))
+          ;; Stale index: the list changed since the dialog was built.
+          (jetpacs-shell-notify "Sequences changed underneath; reopen the editor")
+          (jetpacs-dismiss-dialog)
+          (jetpacs-shell-push))
+         (t
+          (if (>= idx 0)
+              (setcar (nthcdr idx seqs) new-seq)
+            (setq seqs (append seqs (list new-seq))))
+          (when (glasspane-ui--todo-keywords-apply seqs)
+            (jetpacs-shell-notify "TODO sequence saved"))
+          (jetpacs-dismiss-dialog)
+          (jetpacs-shell-push))))))
 
-(jetpacs-defaction "settings.todo.delete"
-  (lambda (args _)
-    (let* ((idx (alist-get 'index args))
-           (seqs (or (default-value 'org-todo-keywords) '((sequence "TODO" "DONE")))))
-      (when (and (>= idx 0) (< idx (length seqs)))
-        (setq seqs (or (append (cl-subseq seqs 0 idx) (cl-subseq seqs (1+ idx)))
-                       ;; Org misbehaves with no keywords at all; deleting
-                       ;; the last sequence falls back to the stock one.
-                       '((sequence "TODO" "|" "DONE"))))
-        (when (glasspane-ui--todo-keywords-apply seqs)
-          (jetpacs-shell-notify "TODO sequence deleted"))
-        (jetpacs-dismiss-dialog)
+  (jetpacs-defaction "settings.todo.delete"
+    (lambda (args _)
+      (let* ((idx (alist-get 'index args))
+             (seqs (or (default-value 'org-todo-keywords) '((sequence "TODO" "DONE")))))
+        (when (and (>= idx 0) (< idx (length seqs)))
+          (setq seqs (or (append (cl-subseq seqs 0 idx) (cl-subseq seqs (1+ idx)))
+                         ;; Org misbehaves with no keywords at all; deleting
+                         ;; the last sequence falls back to the stock one.
+                         '((sequence "TODO" "|" "DONE"))))
+          (when (glasspane-ui--todo-keywords-apply seqs)
+            (jetpacs-shell-notify "TODO sequence deleted"))
+          (jetpacs-dismiss-dialog)
+          (jetpacs-shell-push)))))
+
+  (jetpacs-defaction "agenda.set-mode"
+    ;; `mode' names come from the fallback chips; `value' (a page index)
+    ;; from the tabs body's on_change. Either way the result must name a
+    ;; mode we actually offer.
+    (lambda (args _)
+      (let* ((modes (glasspane-ui--agenda-modes))
+             (idx (alist-get 'value args))
+             (mode (or (alist-get 'mode args)
+                       (and (integerp idx) (nth idx modes)))))
+        (when (member mode modes)
+          (jetpacs-ui-state-put "agenda-mode" mode)
+          (jetpacs-shell-push)))))
+
+  (jetpacs-defaction "agenda.nav"
+    ;; Shift the agenda anchor by DIR (±1) in units of the active span.
+    (lambda (args _)
+      (let* ((dir (alist-get 'dir args))
+             (dir (if (numberp dir) dir 1))
+             (mode (or (jetpacs-ui-state "agenda-mode") "day"))
+             (unit (pcase mode ("week" 'week) ("month" 'month) (_ 'day)))
+             (anchor (glasspane-ui--agenda-anchor)))
+        ;; Month steps walk 1st → 1st so ±1 never skips a short month.
+        (when (eq unit 'month)
+          (setq anchor (concat (substring anchor 0 7) "-01")))
+        (jetpacs-ui-state-put "agenda-anchor"
+                           (glasspane-ui--shift-date anchor dir unit))
         (jetpacs-shell-push)))))
-
-(jetpacs-defaction "agenda.set-mode"
-  ;; `mode' names come from the fallback chips; `value' (a page index)
-  ;; from the tabs body's on_change. Either way the result must name a
-  ;; mode we actually offer.
-  (lambda (args _)
-    (let* ((modes (glasspane-ui--agenda-modes))
-           (idx (alist-get 'value args))
-           (mode (or (alist-get 'mode args)
-                     (and (integerp idx) (nth idx modes)))))
-      (when (member mode modes)
-        (jetpacs-ui-state-put "agenda-mode" mode)
-        (jetpacs-shell-push)))))
-
-(jetpacs-defaction "agenda.nav"
-  ;; Shift the agenda anchor by DIR (±1) in units of the active span.
-  (lambda (args _)
-    (let* ((dir (alist-get 'dir args))
-           (dir (if (numberp dir) dir 1))
-           (mode (or (jetpacs-ui-state "agenda-mode") "day"))
-           (unit (pcase mode ("week" 'week) ("month" 'month) (_ 'day)))
-           (anchor (glasspane-ui--agenda-anchor)))
-      ;; Month steps walk 1st → 1st so ±1 never skips a short month.
-      (when (eq unit 'month)
-        (setq anchor (concat (substring anchor 0 7) "-01")))
-      (jetpacs-ui-state-put "agenda-anchor"
-                         (glasspane-ui--shift-date anchor dir unit))
-      (jetpacs-shell-push))))
 
 (defun glasspane-ui--org-editor-body (file)
   "Reader body for org FILE while read mode is on; nil = plain editor.

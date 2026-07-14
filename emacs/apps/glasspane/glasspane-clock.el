@@ -37,19 +37,20 @@
   (jetpacs-surface-remove "notification:org-clock"))
 
 ;; Closing the loop: a tap on "Clock out" arrives here as an event.action.
-(jetpacs-defaction "org.clock.out"
-                (lambda (&rest _) (when (org-clock-is-active) (org-clock-out))))
-(jetpacs-defaction "org.clock.switch"
-                ;; Placeholder: jump to the running task. Swap for a real
-                ;; task-picker (e.g. org-clock-in to a recent task) when ready.
-                (lambda (&rest _) (org-clock-goto)))
-(jetpacs-defaction "org.clock.in-last"
-                ;; The home-screen widget's "Clock In (Last)" button.
-                (lambda (&rest _)
-                  (condition-case err
-                      (org-clock-in-last)
-                    (error (message "Jetpacs clock-in-last failed: %s"
-                                    (error-message-string err))))))
+(with-jetpacs-owner "glasspane"
+  (jetpacs-defaction "org.clock.out"
+                  (lambda (&rest _) (when (org-clock-is-active) (org-clock-out))))
+  (jetpacs-defaction "org.clock.switch"
+                  ;; Placeholder: jump to the running task. Swap for a real
+                  ;; task-picker (e.g. org-clock-in to a recent task) when ready.
+                  (lambda (&rest _) (org-clock-goto)))
+  (jetpacs-defaction "org.clock.in-last"
+                  ;; The home-screen widget's "Clock In (Last)" button.
+                  (lambda (&rest _)
+                    (condition-case err
+                        (org-clock-in-last)
+                      (error (message "Jetpacs clock-in-last failed: %s"
+                                      (error-message-string err)))))))
 
 (add-hook 'org-clock-in-hook  #'glasspane-clock-in-notification)
 (add-hook 'org-clock-out-hook #'glasspane-clock-out-notification)

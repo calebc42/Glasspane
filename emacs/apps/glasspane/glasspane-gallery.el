@@ -101,36 +101,37 @@ Screen y grows downward, so a top semicircle spans 180°→0°."
 
 ;; ─── Actions ─────────────────────────────────────────────────────────────────
 
-(jetpacs-defaction "demo.gallery"
-  (lambda (_args _payload)
-    (setq glasspane-gallery--open t)
-    (jetpacs-shell-push nil :switch-to "glasspane.gallery")))
+(with-jetpacs-owner "glasspane"
+  (jetpacs-defaction "demo.gallery"
+    (lambda (_args _payload)
+      (setq glasspane-gallery--open t)
+      (jetpacs-shell-push nil :switch-to "glasspane.gallery")))
 
-(jetpacs-defaction "demo.gallery.kind"
-  (lambda (args _payload)
-    (setq glasspane-gallery--kind (or (alist-get 'kind args) "line"))
-    (jetpacs-shell-push)))
+  (jetpacs-defaction "demo.gallery.kind"
+    (lambda (args _payload)
+      (setq glasspane-gallery--kind (or (alist-get 'kind args) "line"))
+      (jetpacs-shell-push)))
 
-(jetpacs-defaction "demo.gallery.level"
-  (lambda (args _payload)
-    (setq glasspane-gallery--level (or (alist-get 'value args) 0.5))
-    (jetpacs-shell-push)))
+  (jetpacs-defaction "demo.gallery.level"
+    (lambda (args _payload)
+      (setq glasspane-gallery--level (or (alist-get 'value args) 0.5))
+      (jetpacs-shell-push)))
 
-(jetpacs-defaction "demo.gallery.point"
-  (lambda (args _payload)
-    (let ((v (alist-get 'value args)))
-      (when (fboundp 'jetpacs-shell-notify)
-        (jetpacs-shell-notify (format "point %s = %s"
-                                   (alist-get 'index v) (alist-get 'y v)))))
-    (jetpacs-shell-push)))
+  (jetpacs-defaction "demo.gallery.point"
+    (lambda (args _payload)
+      (let ((v (alist-get 'value args)))
+        (when (fboundp 'jetpacs-shell-notify)
+          (jetpacs-shell-notify (format "point %s = %s"
+                                     (alist-get 'index v) (alist-get 'y v)))))
+      (jetpacs-shell-push)))
 
-;; ─── Registration ────────────────────────────────────────────────────────────
+  ;; ─── Registration ────────────────────────────────────────────────────────────
 
-(jetpacs-shell-define-view "glasspane.gallery"
-  :builder #'glasspane-gallery--view
-  :when (lambda () glasspane-gallery--open)
-  :overlay (lambda () glasspane-gallery--open)
-  :order 120)
+  (jetpacs-shell-define-view "glasspane.gallery"
+    :builder #'glasspane-gallery--view
+    :when (lambda () glasspane-gallery--open)
+    :overlay (lambda () glasspane-gallery--open)
+    :order 120))
 
 ;; Landing on any real view closes the overlay (mirrors the detail drill-in).
 (add-hook 'jetpacs-shell-view-switched-hook

@@ -59,14 +59,12 @@ generated `glasspane-pack.json' is byte-stable."
         (cons 'layouts         (vconcat jetpacs-lint-spec-layouts))
         (cons 'sources         (vconcat (glasspane-pack--sort-by
                                          'name (jetpacs-source-catalog))))
-        ;; Unfiltered on purpose: the pack build loads only the jetpacs core
-        ;; (which annotates no actions) plus Glasspane, so every action carrying
-        ;; :args/:doc metadata is Glasspane's.  (Owner-scoping via
-        ;; `jetpacs-action-catalog'\\='s owner arg is the eventual model, once
-        ;; every Glasspane registration is wrapped in `with-jetpacs-owner' — the
-        ;; detail/search/notes/agenda modules still register anonymously.)
+        ;; Owner-filtered: every Glasspane registration is wrapped in
+        ;; `with-jetpacs-owner', so the catalog is exact regardless of what
+        ;; else the build environment loaded.  (Sources stay unfiltered —
+        ;; `jetpacs-source-catalog' has no owner arg at this core pin.)
         (cons 'actions         (vconcat (glasspane-pack--sort-by
-                                         'action (jetpacs-action-catalog))))))
+                                         'action (jetpacs-action-catalog "glasspane"))))))
 
 (defun glasspane-pack-json ()
   "The manifest as pretty-printed, newline-terminated JSON text."

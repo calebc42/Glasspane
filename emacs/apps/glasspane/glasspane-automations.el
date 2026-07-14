@@ -166,15 +166,20 @@ the file is the source of truth for the `org/' id namespace."
   (interactive)
   (let* ((rules (glasspane-automations--rules))
          (ids (mapcar (lambda (r) (plist-get r :id)) rules)))
-    ;; Unregister leavers first, then (re)register — each call pushes,
-    ;; and replace-set makes the intermediate states harmless.
-    (dolist (stale (cl-set-difference glasspane-automations--ids ids
-                                      :test #'equal))
-      (jetpacs-trigger-unregister stale))
-    (dolist (r rules)
-      (apply #'jetpacs-trigger-register (plist-get r :id)
-             (cl-loop for (k v) on r by #'cddr
-                      unless (eq k :id) append (list k v))))
+    ;; Owner-bound HERE, not at load time: reload also fires from the
+    ;; files after-save hook and interactively, where no load-time
+    ;; owner binding exists — unregister unclaims unconditionally, so
+    ;; an unowned re-register would strand the triggers unattributed.
+    (with-jetpacs-owner "glasspane"
+      ;; Unregister leavers first, then (re)register — each call pushes,
+      ;; and replace-set makes the intermediate states harmless.
+      (dolist (stale (cl-set-difference glasspane-automations--ids ids
+                                        :test #'equal))
+        (jetpacs-trigger-unregister stale))
+      (dolist (r rules)
+        (apply #'jetpacs-trigger-register (plist-get r :id)
+               (cl-loop for (k v) on r by #'cddr
+                        unless (eq k :id) append (list k v)))))
     (setq glasspane-automations--ids ids)
     (when (called-interactively-p 'interactive)
       (message "Jetpacs automations: %d rule(s) active" (length ids)))

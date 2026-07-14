@@ -295,24 +295,25 @@ vulpea is unavailable or ID is blank — never an error."
 
 ;; The mention grep is the battery-risk item: computed only on the
 ;; explicit button tap, cached per note, dropped by the standard seam.
-(jetpacs-defaction "notes.mentions"
-  (lambda (args _)
-    (let ((id (alist-get 'id args)))
-      (when (and (stringp id) (glasspane-notes-available-p)
-                 (fboundp 'vulpea-note-unlinked-mentions-async))
-        (when-let ((note (vulpea-db-get-by-id id)))
-          (puthash id 'pending glasspane-notes--mentions)
-          (vulpea-note-unlinked-mentions-async
-           note
-           (lambda (mentions)
-             (puthash id mentions glasspane-notes--mentions)
-             (jetpacs-shell-push))
-           (lambda (_err)
-             (puthash id 'error glasspane-notes--mentions)
-             (jetpacs-shell-push)))
-          (jetpacs-shell-push)))))
-  :doc "Scan for unlinked mentions of a note (async ripgrep)."
-  :args '((:name id :type "text" :required t)))
+(with-jetpacs-owner "glasspane"
+  (jetpacs-defaction "notes.mentions"
+    (lambda (args _)
+      (let ((id (alist-get 'id args)))
+        (when (and (stringp id) (glasspane-notes-available-p)
+                   (fboundp 'vulpea-note-unlinked-mentions-async))
+          (when-let ((note (vulpea-db-get-by-id id)))
+            (puthash id 'pending glasspane-notes--mentions)
+            (vulpea-note-unlinked-mentions-async
+             note
+             (lambda (mentions)
+               (puthash id mentions glasspane-notes--mentions)
+               (jetpacs-shell-push))
+             (lambda (_err)
+               (puthash id 'error glasspane-notes--mentions)
+               (jetpacs-shell-push)))
+            (jetpacs-shell-push)))))
+    :doc "Scan for unlinked mentions of a note (async ripgrep)."
+    :args '((:name id :type "text" :required t))))
 
 (defun glasspane-notes--materialize-terms (id matched)
   "The strings to look for on the mention line, most specific first.
@@ -345,40 +346,41 @@ must not nest a link inside a link."
                                          (org-in-regexp org-link-any-re)))
                               return term))))
 
-(jetpacs-defaction "link.materialize"
-  ;; Replace the first un-linked occurrence of the mention on LINE in
-  ;; PATH with a real id link.  Matching is case-insensitive (search
-  ;; UX); the replacement keeps the text exactly as written in the
-  ;; file.  Every failure path answers with a snackbar — a tap that
-  ;; silently does nothing is a bug class, not an outcome.
-  (lambda (args _)
-    (let* ((id (alist-get 'id args))
-           (path (alist-get 'path args))
-           (line (alist-get 'line args))
-           (terms (and (stringp id)
-                       (glasspane-notes--materialize-terms
-                        id (alist-get 'matched args)))))
-      (cond
-       ((not (and (stringp id) (stringp path) (integerp line) terms))
-        (jetpacs-shell-notify "Couldn't link — mention data incomplete"))
-       ((not (file-writable-p path))
-        (jetpacs-shell-notify (format "Couldn't link — %s not writable"
-                                   (file-name-nondirectory path))))
-       (t
-        (with-current-buffer (find-file-noselect path)
-          (org-with-wide-buffer
-           (goto-char (point-min))
-           (forward-line (1- line))
-           (if (not (glasspane-notes--find-unlinked
-                     terms (line-end-position)))
-               (jetpacs-shell-notify
-                "Couldn't find the mention — file changed? Refresh and retry")
-             (replace-match (format "[[id:%s][%s]]" id (match-string 0))
-                            t t)
-             (glasspane-org--save-and-invalidate)
-             (remhash id glasspane-notes--mentions)
-             (jetpacs-shell-notify "Linked"))))))
-      (jetpacs-shell-push))))
+(with-jetpacs-owner "glasspane"
+  (jetpacs-defaction "link.materialize"
+    ;; Replace the first un-linked occurrence of the mention on LINE in
+    ;; PATH with a real id link.  Matching is case-insensitive (search
+    ;; UX); the replacement keeps the text exactly as written in the
+    ;; file.  Every failure path answers with a snackbar — a tap that
+    ;; silently does nothing is a bug class, not an outcome.
+    (lambda (args _)
+      (let* ((id (alist-get 'id args))
+             (path (alist-get 'path args))
+             (line (alist-get 'line args))
+             (terms (and (stringp id)
+                         (glasspane-notes--materialize-terms
+                          id (alist-get 'matched args)))))
+        (cond
+         ((not (and (stringp id) (stringp path) (integerp line) terms))
+          (jetpacs-shell-notify "Couldn't link — mention data incomplete"))
+         ((not (file-writable-p path))
+          (jetpacs-shell-notify (format "Couldn't link — %s not writable"
+                                     (file-name-nondirectory path))))
+         (t
+          (with-current-buffer (find-file-noselect path)
+            (org-with-wide-buffer
+             (goto-char (point-min))
+             (forward-line (1- line))
+             (if (not (glasspane-notes--find-unlinked
+                       terms (line-end-position)))
+                 (jetpacs-shell-notify
+                  "Couldn't find the mention — file changed? Refresh and retry")
+               (replace-match (format "[[id:%s][%s]]" id (match-string 0))
+                              t t)
+               (glasspane-org--save-and-invalidate)
+               (remhash id glasspane-notes--mentions)
+               (jetpacs-shell-notify "Linked"))))))
+        (jetpacs-shell-push)))))
 
 (add-hook 'jetpacs-shell-refresh-hook
           (lambda () (clrhash glasspane-notes--mentions)))

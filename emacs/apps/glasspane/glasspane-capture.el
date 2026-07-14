@@ -151,19 +151,20 @@ keeps a previous capture's device-side field state from resurfacing."
     (error
      (message "Jetpacs capture form error: %s" (error-message-string err)))))
 
-(jetpacs-defaction "org.capture.show"
-  (lambda (_ _)
-    (glasspane-ui-show-capture-dialog)))
+(with-jetpacs-owner "glasspane"
+  (jetpacs-defaction "org.capture.show"
+    (lambda (_ _)
+      (glasspane-ui-show-capture-dialog)))
 
-(jetpacs-defaction "org.capture.select"
-  (lambda (args _)
-    (glasspane-ui-show-capture-form (alist-get 'key args))))
+  (jetpacs-defaction "org.capture.select"
+    (lambda (args _)
+      (glasspane-ui-show-capture-form (alist-get 'key args))))
 
-(jetpacs-defaction "org.capture.cancel"
-  (lambda (_ _)
-    (setq glasspane-ui--shared-text nil
-          glasspane-ui--shared-subject nil)
-    (jetpacs-dismiss-dialog)))
+  (jetpacs-defaction "org.capture.cancel"
+    (lambda (_ _)
+      (setq glasspane-ui--shared-text nil
+            glasspane-ui--shared-subject nil)
+      (jetpacs-dismiss-dialog))))
 
 (defun glasspane-ui--on-share (args _payload)
   "Android share sheet → capture: stash the text/subject, open the picker.
@@ -185,40 +186,41 @@ appears on the next replay."
 ;; The companion's share sheet emits the app-agnostic `share.text'; this
 ;; app answers it with org capture.  The old app-specific id stays
 ;; registered so shares queued by a pre-rename companion still replay.
-(jetpacs-defaction "share.text" #'glasspane-ui--on-share)
+(with-jetpacs-owner "glasspane"
+  (jetpacs-defaction "share.text" #'glasspane-ui--on-share)
 
-(jetpacs-defaction "org.capture.share" #'glasspane-ui--on-share)
+  (jetpacs-defaction "org.capture.share" #'glasspane-ui--on-share)
 
-(jetpacs-defaction "org.capture.submit"
-  (lambda (args _)
-    (let ((key (alist-get 'key args)))
-      (condition-case err
-          (let* ((templates (glasspane-org--capture-templates))
-                 (tmpl (cl-find-if
-                        (lambda (t-info) (equal (alist-get 'key t-info) key))
-                        templates))
-                 (prompts (append (alist-get 'prompts tmpl) nil))
-                 ;; Field values arrived earlier as state.changed events and
-                 ;; were recorded into `jetpacs--ui-state' by jetpacs-surfaces.
-                 (form (glasspane-capture--form))
-                 (values (mapcar
-                          (lambda (p)
-                            (let ((v (jetpacs-form-value form p)))
-                              (cons p (if (stringp v) v ""))))
-                          prompts)))
-            (glasspane-org--do-capture key values glasspane-ui--shared-text)
-            (setq glasspane-ui--shared-text nil
-                  glasspane-ui--shared-subject nil)
-            (jetpacs-org-cache-invalidate 'glasspane)
-            (jetpacs-form-reset form)
-            (jetpacs-shell-notify "Captured ✓")
-            (jetpacs-dismiss-dialog)
-            (jetpacs-shell-push))
-        (error
-         (message "Jetpacs capture submit error: %s" (error-message-string err))
-         (setq glasspane-ui--shared-text nil
-               glasspane-ui--shared-subject nil)
-         (jetpacs-form-reset (glasspane-capture--form))
-         (jetpacs-dismiss-dialog))))))
+  (jetpacs-defaction "org.capture.submit"
+    (lambda (args _)
+      (let ((key (alist-get 'key args)))
+        (condition-case err
+            (let* ((templates (glasspane-org--capture-templates))
+                   (tmpl (cl-find-if
+                          (lambda (t-info) (equal (alist-get 'key t-info) key))
+                          templates))
+                   (prompts (append (alist-get 'prompts tmpl) nil))
+                   ;; Field values arrived earlier as state.changed events and
+                   ;; were recorded into `jetpacs--ui-state' by jetpacs-surfaces.
+                   (form (glasspane-capture--form))
+                   (values (mapcar
+                            (lambda (p)
+                              (let ((v (jetpacs-form-value form p)))
+                                (cons p (if (stringp v) v ""))))
+                            prompts)))
+              (glasspane-org--do-capture key values glasspane-ui--shared-text)
+              (setq glasspane-ui--shared-text nil
+                    glasspane-ui--shared-subject nil)
+              (jetpacs-org-cache-invalidate 'glasspane)
+              (jetpacs-form-reset form)
+              (jetpacs-shell-notify "Captured ✓")
+              (jetpacs-dismiss-dialog)
+              (jetpacs-shell-push))
+          (error
+           (message "Jetpacs capture submit error: %s" (error-message-string err))
+           (setq glasspane-ui--shared-text nil
+                 glasspane-ui--shared-subject nil)
+           (jetpacs-form-reset (glasspane-capture--form))
+           (jetpacs-dismiss-dialog)))))))
 
 (provide 'glasspane-capture)

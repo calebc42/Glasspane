@@ -566,7 +566,8 @@ labelled menu rather than cluttering the bar."
               (glasspane-srs--top-actions))
    :snackbar snackbar))
 
-(jetpacs-shell-define-view "glasspane.srs" :builder #'glasspane-srs--view :order 78)
+(with-jetpacs-owner "glasspane"
+  (jetpacs-shell-define-view "glasspane.srs" :builder #'glasspane-srs--view :order 78))
 
 ;; Everyday nav (the drawer contract); no entry while org-srs is absent.
 ;; The due count rides the drawer item's badge (memoised; nil when clear).
@@ -580,27 +581,28 @@ labelled menu rather than cluttering the bar."
 
 ;; ─── Actions ─────────────────────────────────────────────────────────────────
 
-(jetpacs-defaction "srs.review.start"
-  (lambda (_args _)
-    (if (not (glasspane-srs-available-p))
-        (jetpacs-shell-notify "org-srs is not installed")
-      (setq glasspane-srs--active t glasspane-srs--undo nil)
-      (glasspane-srs--advance))
-    (jetpacs-shell-push nil :switch-to "glasspane.srs")))
+(with-jetpacs-owner "glasspane"
+  (jetpacs-defaction "srs.review.start"
+    (lambda (_args _)
+      (if (not (glasspane-srs-available-p))
+          (jetpacs-shell-notify "org-srs is not installed")
+        (setq glasspane-srs--active t glasspane-srs--undo nil)
+        (glasspane-srs--advance))
+      (jetpacs-shell-push nil :switch-to "glasspane.srs")))
 
-(jetpacs-defaction "srs.answer.show"
-  (lambda (_args _)
-    (when glasspane-srs--current (setq glasspane-srs--revealed t))
-    (jetpacs-shell-push)))
+  (jetpacs-defaction "srs.answer.show"
+    (lambda (_args _)
+      (when glasspane-srs--current (setq glasspane-srs--revealed t))
+      (jetpacs-shell-push)))
 
-(jetpacs-defaction "srs.answer.page"
-  ;; The review pager settled on a page; mirror it into the reveal flag —
-  ;; no re-push (both pages already shipped), just state coherence for
-  ;; undo and the button-era code path.
-  (lambda (args _)
-    (let ((idx (alist-get 'value args)))
-      (when (and glasspane-srs--current (integerp idx))
-        (setq glasspane-srs--revealed (= idx 1))))))
+  (jetpacs-defaction "srs.answer.page"
+    ;; The review pager settled on a page; mirror it into the reveal flag —
+    ;; no re-push (both pages already shipped), just state coherence for
+    ;; undo and the button-era code path.
+    (lambda (args _)
+      (let ((idx (alist-get 'value args)))
+        (when (and glasspane-srs--current (integerp idx))
+          (setq glasspane-srs--revealed (= idx 1)))))))
 
 (defun glasspane-srs--push-undo (item-args)
   "Snapshot ITEM-ARGS's log drawer onto the undo stack (capped).
@@ -617,105 +619,106 @@ Best-effort: a snapshot failure must not block the rating."
            (when (nthcdr 20 glasspane-srs--undo)
              (setcdr (nthcdr 19 glasspane-srs--undo) nil))))))))
 
-(jetpacs-defaction "srs.rate"
-  (lambda (args _)
-    (let ((kw (cadr (assoc (alist-get 'rating args) glasspane-srs--ratings))))
-      (when (and kw glasspane-srs--current)
-        (glasspane-srs--push-undo glasspane-srs--current)
-        (glasspane-srs--engine
-          ;; `org-srs-review-rate' assumes a session: it reads a
-          ;; buffer-local schedule offset from `(current-buffer)', which
-          ;; the session normally makes the item's buffer.  Driving it in
-          ;; the background we must set that up ourselves — current-buffer
-          ;; = the item's buffer, and org-srs-review-item nil so it rates
-          ;; the item passed in ARGS.  (Missed, the offset assert fails,
-          ;; the rating never persists, and the card loops forever.)
-          (let ((buf (marker-buffer
-                      (apply #'org-srs-item-marker glasspane-srs--current)))
-                (org-srs-review-item nil))
-            (with-current-buffer buf
-              (apply #'org-srs-review-rate kw glasspane-srs--current))))
-        (jetpacs-org-cache-invalidate 'glasspane)
-        (glasspane-srs--advance)))
-    (jetpacs-shell-push)))
-
-(jetpacs-defaction "srs.quit"
-  (lambda (_args _)
-    (setq glasspane-srs--active nil glasspane-srs--current nil
-          glasspane-srs--revealed nil glasspane-srs--undo nil)
-    (jetpacs-shell-push)))
-
-(jetpacs-defaction "srs.postpone"
-  (lambda (_args _)
-    (when glasspane-srs--current
-      (glasspane-srs--engine
-        (apply #'org-srs-review-postpone '(1 :day) glasspane-srs--current))
-      (jetpacs-org-cache-invalidate 'glasspane)
-      (glasspane-srs--advance))
-    (jetpacs-shell-push)))
-
-(jetpacs-defaction "srs.suspend"
-  (lambda (_args _)
-    (when glasspane-srs--current
-      (glasspane-srs--engine
-        (let ((marker (apply #'org-srs-item-marker glasspane-srs--current)))
-          (with-current-buffer (marker-buffer marker)
-            (save-excursion
-              (save-restriction
-                (widen)
-                (goto-char marker)
-                (org-back-to-heading t)
-                (unless (org-in-commented-heading-p) (org-toggle-comment))
-                (let ((save-silently t)) (save-buffer)))))))
-      (jetpacs-org-cache-invalidate 'glasspane)
-      (glasspane-srs--advance))
-    (jetpacs-shell-push)))
-
-(jetpacs-defaction "srs.undo"
-  ;; org-srs's own undo history is set up only by the session we don't
-  ;; run, so we restore the item's log drawer from our own snapshot and
-  ;; re-present the card (answer shown) for a fresh rating.
-  (lambda (_args _)
-    (if-let ((snap (pop glasspane-srs--undo)))
-        (progn
+(with-jetpacs-owner "glasspane"
+  (jetpacs-defaction "srs.rate"
+    (lambda (args _)
+      (let ((kw (cadr (assoc (alist-get 'rating args) glasspane-srs--ratings))))
+        (when (and kw glasspane-srs--current)
+          (glasspane-srs--push-undo glasspane-srs--current)
           (glasspane-srs--engine
-            (let* ((item-args (car snap))
-                   (marker (apply #'org-srs-item-marker item-args)))
+            ;; `org-srs-review-rate' assumes a session: it reads a
+            ;; buffer-local schedule offset from `(current-buffer)', which
+            ;; the session normally makes the item's buffer.  Driving it in
+            ;; the background we must set that up ourselves — current-buffer
+            ;; = the item's buffer, and org-srs-review-item nil so it rates
+            ;; the item passed in ARGS.  (Missed, the offset assert fails,
+            ;; the rating never persists, and the card loops forever.)
+            (let ((buf (marker-buffer
+                        (apply #'org-srs-item-marker glasspane-srs--current)))
+                  (org-srs-review-item nil))
+              (with-current-buffer buf
+                (apply #'org-srs-review-rate kw glasspane-srs--current))))
+          (jetpacs-org-cache-invalidate 'glasspane)
+          (glasspane-srs--advance)))
+      (jetpacs-shell-push)))
+
+  (jetpacs-defaction "srs.quit"
+    (lambda (_args _)
+      (setq glasspane-srs--active nil glasspane-srs--current nil
+            glasspane-srs--revealed nil glasspane-srs--undo nil)
+      (jetpacs-shell-push)))
+
+  (jetpacs-defaction "srs.postpone"
+    (lambda (_args _)
+      (when glasspane-srs--current
+        (glasspane-srs--engine
+          (apply #'org-srs-review-postpone '(1 :day) glasspane-srs--current))
+        (jetpacs-org-cache-invalidate 'glasspane)
+        (glasspane-srs--advance))
+      (jetpacs-shell-push)))
+
+  (jetpacs-defaction "srs.suspend"
+    (lambda (_args _)
+      (when glasspane-srs--current
+        (glasspane-srs--engine
+          (let ((marker (apply #'org-srs-item-marker glasspane-srs--current)))
+            (with-current-buffer (marker-buffer marker)
+              (save-excursion
+                (save-restriction
+                  (widen)
+                  (goto-char marker)
+                  (org-back-to-heading t)
+                  (unless (org-in-commented-heading-p) (org-toggle-comment))
+                  (let ((save-silently t)) (save-buffer)))))))
+        (jetpacs-org-cache-invalidate 'glasspane)
+        (glasspane-srs--advance))
+      (jetpacs-shell-push)))
+
+  (jetpacs-defaction "srs.undo"
+    ;; org-srs's own undo history is set up only by the session we don't
+    ;; run, so we restore the item's log drawer from our own snapshot and
+    ;; re-present the card (answer shown) for a fresh rating.
+    (lambda (_args _)
+      (if-let ((snap (pop glasspane-srs--undo)))
+          (progn
+            (glasspane-srs--engine
+              (let* ((item-args (car snap))
+                     (marker (apply #'org-srs-item-marker item-args)))
+                (with-current-buffer (marker-buffer marker)
+                  (org-with-wide-buffer
+                   (goto-char marker)
+                   (delete-region
+                    (progn (org-srs-log-beginning-of-drawer) (point))
+                    (progn (org-srs-log-end-of-drawer) (point)))
+                   (insert (cdr snap))
+                   (org-srs-log-hide-drawer)
+                   (let ((save-silently t)) (save-buffer))))))
+            (jetpacs-org-cache-invalidate 'glasspane)
+            (setq glasspane-srs--current (car snap) glasspane-srs--revealed t))
+        (jetpacs-shell-notify "Nothing to undo"))
+      (jetpacs-shell-push)))
+
+  ;; ─── Authoring: Make flashcard on the heading detail view ───────────────────
+
+  (jetpacs-defaction "srs.item.create"
+    ;; The type picker and any follow-up prompts arrive as phone dialogs
+    ;; through the minibuffer bridge — write it as if at the keyboard.
+    (lambda (args _)
+      (if (not (glasspane-srs-available-p))
+          (jetpacs-shell-notify "org-srs is not installed")
+        (condition-case err
+            (let ((marker (jetpacs-org-resolve-ref args)))
               (with-current-buffer (marker-buffer marker)
                 (org-with-wide-buffer
                  (goto-char marker)
-                 (delete-region
-                  (progn (org-srs-log-beginning-of-drawer) (point))
-                  (progn (org-srs-log-end-of-drawer) (point)))
-                 (insert (cdr snap))
-                 (org-srs-log-hide-drawer)
-                 (let ((save-silently t)) (save-buffer))))))
-          (jetpacs-org-cache-invalidate 'glasspane)
-          (setq glasspane-srs--current (car snap) glasspane-srs--revealed t))
-      (jetpacs-shell-notify "Nothing to undo"))
-    (jetpacs-shell-push)))
-
-;; ─── Authoring: Make flashcard on the heading detail view ───────────────────
-
-(jetpacs-defaction "srs.item.create"
-  ;; The type picker and any follow-up prompts arrive as phone dialogs
-  ;; through the minibuffer bridge — write it as if at the keyboard.
-  (lambda (args _)
-    (if (not (glasspane-srs-available-p))
-        (jetpacs-shell-notify "org-srs is not installed")
-      (condition-case err
-          (let ((marker (jetpacs-org-resolve-ref args)))
-            (with-current-buffer (marker-buffer marker)
-              (org-with-wide-buffer
-               (goto-char marker)
-               (org-srs-item-create))
-              (let ((save-silently t)) (save-buffer)))
-            (jetpacs-org-cache-invalidate 'glasspane)
-            (jetpacs-shell-notify "Review item created"))
-        (quit (jetpacs-shell-notify "Cancelled"))
-        (error (jetpacs-shell-notify
-                (format "Flashcard: %s" (error-message-string err))))))
-    (jetpacs-shell-push)))
+                 (org-srs-item-create))
+                (let ((save-silently t)) (save-buffer)))
+              (jetpacs-org-cache-invalidate 'glasspane)
+              (jetpacs-shell-notify "Review item created"))
+          (quit (jetpacs-shell-notify "Cancelled"))
+          (error (jetpacs-shell-notify
+                  (format "Flashcard: %s" (error-message-string err))))))
+      (jetpacs-shell-push))))
 
 (defun glasspane-srs-detail-nodes (ref)
   "The detail-view section for REF: make this heading reviewable."

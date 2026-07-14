@@ -300,7 +300,8 @@ Field ids come from the `jetpacs-form' registry; views.save reads them."
       (glasspane-views--open-view view snackbar)
     (glasspane-views--hub snackbar)))
 
-(jetpacs-shell-define-view "glasspane.views" :builder #'glasspane-views--view :order 75)
+(with-jetpacs-owner "glasspane"
+  (jetpacs-shell-define-view "glasspane.views" :builder #'glasspane-views--view :order 75))
 
 ;; Everyday nav: saved views are a daily destination, so they ride the
 ;; drawer (the contract: drawer = everyday nav, satellites = settings).
@@ -312,81 +313,82 @@ Field ids come from the `jetpacs-form' registry; views.save reads them."
 
 ;; ─── Actions ─────────────────────────────────────────────────────────────────
 
-(jetpacs-defaction "views.open"
-  (lambda (args _)
-    (let ((name (alist-get 'name args)))
-      (when (glasspane-views--get name)
-        (setq glasspane-views--current name)
-        (jetpacs-shell-push nil :switch-to "glasspane.views"))))
-  :doc "Open a saved view by name."
-  :args '((:name name :type "text" :required t)))
+(with-jetpacs-owner "glasspane"
+  (jetpacs-defaction "views.open"
+    (lambda (args _)
+      (let ((name (alist-get 'name args)))
+        (when (glasspane-views--get name)
+          (setq glasspane-views--current name)
+          (jetpacs-shell-push nil :switch-to "glasspane.views"))))
+    :doc "Open a saved view by name."
+    :args '((:name name :type "text" :required t)))
 
-(jetpacs-defaction "views.back"
-  (lambda (_args _)
-    (setq glasspane-views--current nil)
-    (jetpacs-shell-push nil :switch-to "glasspane.views")))
+  (jetpacs-defaction "views.back"
+    (lambda (_args _)
+      (setq glasspane-views--current nil)
+      (jetpacs-shell-push nil :switch-to "glasspane.views")))
 
-(jetpacs-defaction "views.rendering"
-  (lambda (args _)
-    (let ((view (glasspane-views--get (alist-get 'name args)))
-          (rendering (alist-get 'rendering args)))
-      (when (and view (member rendering glasspane-views--renderings))
-        (glasspane-views--set-rendering (alist-get 'name view) rendering)
-        (glasspane-views--persist)
+  (jetpacs-defaction "views.rendering"
+    (lambda (args _)
+      (let ((view (glasspane-views--get (alist-get 'name args)))
+            (rendering (alist-get 'rendering args)))
+        (when (and view (member rendering glasspane-views--renderings))
+          (glasspane-views--set-rendering (alist-get 'name view) rendering)
+          (glasspane-views--persist)
+          (jetpacs-shell-push))))
+    :doc "Switch a saved view's rendering (list/board/calendar)."
+    :args '((:name name :type "text" :required t)
+            (:name rendering :type "enum" :values ["list" "board" "calendar"] :required t)))
+
+  (jetpacs-defaction "views.save"
+    (lambda (_args _)
+      (let* ((form (glasspane-views--form))
+             (name (string-trim
+                    (or (jetpacs-form-value form "name") "")))
+             (query (string-trim
+                     (or (jetpacs-form-value form "query") "")))
+             (rendering (let ((r (jetpacs-form-value form "rendering")))
+                          (cond ((stringp r) r)
+                                ((consp r) (car r))
+                                ((vectorp r) (aref r 0))
+                                (t "list")))))
+        (cond
+         ((string-empty-p name) (jetpacs-shell-notify "The view needs a name"))
+         ((string-empty-p query) (jetpacs-shell-notify "The view needs a query"))
+         (t
+          (condition-case err
+              (progn
+                ;; Parse now so a broken query fails at save, not render.
+                (jetpacs-org-parse-query query)
+                (setq glasspane-saved-views
+                      (append (cl-remove name glasspane-saved-views
+                                         :key (lambda (v) (alist-get 'name v))
+                                         :test #'equal)
+                              (list `((name . ,name)
+                                      (query . ,query)
+                                      (rendering . ,(if (member rendering
+                                                                glasspane-views--renderings)
+                                                        rendering "list"))))))
+                (glasspane-views--persist)
+                (jetpacs-form-reset form)
+                (jetpacs-shell-notify (format "Saved view %s" name)))
+            (user-error (jetpacs-shell-notify (error-message-string err))))))
         (jetpacs-shell-push))))
-  :doc "Switch a saved view's rendering (list/board/calendar)."
-  :args '((:name name :type "text" :required t)
-          (:name rendering :type "enum" :values ["list" "board" "calendar"] :required t)))
 
-(jetpacs-defaction "views.save"
-  (lambda (_args _)
-    (let* ((form (glasspane-views--form))
-           (name (string-trim
-                  (or (jetpacs-form-value form "name") "")))
-           (query (string-trim
-                   (or (jetpacs-form-value form "query") "")))
-           (rendering (let ((r (jetpacs-form-value form "rendering")))
-                        (cond ((stringp r) r)
-                              ((consp r) (car r))
-                              ((vectorp r) (aref r 0))
-                              (t "list")))))
-      (cond
-       ((string-empty-p name) (jetpacs-shell-notify "The view needs a name"))
-       ((string-empty-p query) (jetpacs-shell-notify "The view needs a query"))
-       (t
-        (condition-case err
-            (progn
-              ;; Parse now so a broken query fails at save, not render.
-              (jetpacs-org-parse-query query)
-              (setq glasspane-saved-views
-                    (append (cl-remove name glasspane-saved-views
-                                       :key (lambda (v) (alist-get 'name v))
-                                       :test #'equal)
-                            (list `((name . ,name)
-                                    (query . ,query)
-                                    (rendering . ,(if (member rendering
-                                                              glasspane-views--renderings)
-                                                      rendering "list"))))))
-              (glasspane-views--persist)
-              (jetpacs-form-reset form)
-              (jetpacs-shell-notify (format "Saved view %s" name)))
-          (user-error (jetpacs-shell-notify (error-message-string err))))))
-      (jetpacs-shell-push))))
-
-(jetpacs-defaction "views.delete"
-  (lambda (args _)
-    (let ((name (alist-get 'name args)))
-      (when (glasspane-views--get name)
-        (setq glasspane-saved-views
-              (cl-remove name glasspane-saved-views
-                         :key (lambda (v) (alist-get 'name v)) :test #'equal))
-        (glasspane-views--persist)
-        (when (equal glasspane-views--current name)
-          (setq glasspane-views--current nil))
-        (jetpacs-shell-notify (format "Deleted view %s" name))
-        (jetpacs-shell-push))))
-  :doc "Delete a saved view by name."
-  :args '((:name name :type "text" :required t)))
+  (jetpacs-defaction "views.delete"
+    (lambda (args _)
+      (let ((name (alist-get 'name args)))
+        (when (glasspane-views--get name)
+          (setq glasspane-saved-views
+                (cl-remove name glasspane-saved-views
+                           :key (lambda (v) (alist-get 'name v)) :test #'equal))
+          (glasspane-views--persist)
+          (when (equal glasspane-views--current name)
+            (setq glasspane-views--current nil))
+          (jetpacs-shell-notify (format "Deleted view %s" name))
+          (jetpacs-shell-push))))
+    :doc "Delete a saved view by name."
+    :args '((:name name :type "text" :required t))))
 
 (provide 'glasspane-views)
 ;;; glasspane-views.el ends here

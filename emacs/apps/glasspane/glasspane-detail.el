@@ -116,10 +116,11 @@ re-pushing is cheap."
                                        :when-offline "drop")))))
    :snackbar snackbar)))
 
-(jetpacs-shell-define-view "glasspane.detail" :builder #'glasspane-ui--detail-view
-                        :when (lambda () (and glasspane-ui--detail-ref t))
-                        :overlay (lambda () (and glasspane-ui--detail-ref t))
-                        :order 110)
+(with-jetpacs-owner "glasspane"
+  (jetpacs-shell-define-view "glasspane.detail" :builder #'glasspane-ui--detail-view
+                          :when (lambda () (and glasspane-ui--detail-ref t))
+                          :overlay (lambda () (and glasspane-ui--detail-ref t))
+                          :order 110))
 
 (defun glasspane-ui--agenda-card (it)
   "A detail-rich agenda card for item IT.
@@ -710,336 +711,337 @@ container would break Compose) and wrap otherwise."
 
 ;; ─── Action Handlers ─────────────────────────────────────────────────────────
 
-(jetpacs-defaction "heading.tap"
-  (lambda (args _)
-    ;; ARGS is the ref alist (id/file/pos/headline) the card embedded.
-    ;; This push IS the navigation, so it forces the detail view.
-    (setq glasspane-ui--detail-ref args)
-    (setq glasspane-ui--detail-read-mode t)
-    (jetpacs-shell-push nil :switch-to "glasspane.detail"))
-  :doc "Open a heading in the detail view."
-  :args '((:name ref :type "ref" :required t)))
+(with-jetpacs-owner "glasspane"
+  (jetpacs-defaction "heading.tap"
+    (lambda (args _)
+      ;; ARGS is the ref alist (id/file/pos/headline) the card embedded.
+      ;; This push IS the navigation, so it forces the detail view.
+      (setq glasspane-ui--detail-ref args)
+      (setq glasspane-ui--detail-read-mode t)
+      (jetpacs-shell-push nil :switch-to "glasspane.detail"))
+    :doc "Open a heading in the detail view."
+    :args '((:name ref :type "ref" :required t)))
 
-(jetpacs-defaction "detail.toggle-read"
-  (lambda (_ _)
-    (setq glasspane-ui--detail-read-mode (not glasspane-ui--detail-read-mode))
-    (jetpacs-shell-push nil :switch-to "glasspane.detail")))
+  (jetpacs-defaction "detail.toggle-read"
+    (lambda (_ _)
+      (setq glasspane-ui--detail-read-mode (not glasspane-ui--detail-read-mode))
+      (jetpacs-shell-push nil :switch-to "glasspane.detail")))
 
-(jetpacs-defaction "detail.save"
-  (lambda (args _)
-    (let ((ref (alist-get 'ref args))
-          (value (alist-get 'value args)))
-      (when (and ref value)
-        (condition-case err
-            (let* ((marker (jetpacs-org-resolve-ref ref))
-                   (buf (marker-buffer marker))
-                   (pos (marker-position marker)))
-              (with-current-buffer buf
-                (org-with-wide-buffer
-                 (goto-char pos)
-                 (org-mark-subtree)
-                 (delete-region (region-beginning) (region-end))
-                 (insert value)
-                 (goto-char pos)
-                 (setq glasspane-ui--detail-ref (jetpacs-org-heading-ref))
-                 (glasspane-org--save-and-invalidate)))
-              (setq glasspane-ui--detail-read-mode t)
-              (jetpacs-shell-notify "Saved heading"))
-          (error
-           (jetpacs-shell-notify (format "Save failed: %s" (error-message-string err))))))
-      (jetpacs-shell-push))))
-
-(jetpacs-defaction "heading.back"
-  ;; Legacy: detail's back button is now a companion-local view.switch.
-  ;; Kept for stale cached UIs.
-  (lambda (_ _)
-    (setq glasspane-ui--detail-ref nil)
-    (jetpacs-shell-push nil :switch-to (jetpacs-shell-current-tab))))
-
-(jetpacs-defaction "heading.todo-set"
-  (lambda (args _)
-    (let* ((state (alist-get 'state args))
-           (clear (equal state "")))
-      (when (and state
-                 (glasspane-ui--at-ref args (lambda () (org-todo (if clear 'none state))) t))
-        (jetpacs-shell-notify (if clear "State cleared" (format "State → %s" state)))
+  (jetpacs-defaction "detail.save"
+    (lambda (args _)
+      (let ((ref (alist-get 'ref args))
+            (value (alist-get 'value args)))
+        (when (and ref value)
+          (condition-case err
+              (let* ((marker (jetpacs-org-resolve-ref ref))
+                     (buf (marker-buffer marker))
+                     (pos (marker-position marker)))
+                (with-current-buffer buf
+                  (org-with-wide-buffer
+                   (goto-char pos)
+                   (org-mark-subtree)
+                   (delete-region (region-beginning) (region-end))
+                   (insert value)
+                   (goto-char pos)
+                   (setq glasspane-ui--detail-ref (jetpacs-org-heading-ref))
+                   (glasspane-org--save-and-invalidate)))
+                (setq glasspane-ui--detail-read-mode t)
+                (jetpacs-shell-notify "Saved heading"))
+            (error
+             (jetpacs-shell-notify (format "Save failed: %s" (error-message-string err))))))
         (jetpacs-shell-push))))
-  :doc "Set a heading's TODO state; an empty state clears it."
-  :args '((:name ref :type "ref" :required t)
-          (:name state :type "text" :required t)))
 
-(jetpacs-defaction "heading.todo-cycle"
-  (lambda (args _)
-    (when (glasspane-ui--at-ref args
-                                (lambda ()
-                                  (org-todo)
-                                  (unless (org-get-todo-state)
-                                    (org-todo)))
-                                t)
-      (let* ((marker (jetpacs-org-resolve-ref args))
-             (state (with-current-buffer (marker-buffer marker)
-                      (org-with-wide-buffer
-                       (goto-char marker)
-                       (org-get-todo-state)))))
-        (jetpacs-shell-notify (if state (format "State → %s" state) "State cleared"))
-        (jetpacs-shell-push))))
-  :doc "Cycle a heading through the TODO keyword sequence."
-  :args '((:name ref :type "ref" :required t)))
+  (jetpacs-defaction "heading.back"
+    ;; Legacy: detail's back button is now a companion-local view.switch.
+    ;; Kept for stale cached UIs.
+    (lambda (_ _)
+      (setq glasspane-ui--detail-ref nil)
+      (jetpacs-shell-push nil :switch-to (jetpacs-shell-current-tab))))
 
-(jetpacs-defaction "heading.schedule"
-  (lambda (args _)
-    ;; CLEAR removes the timestamp; otherwise WHEN (relative, e.g. "+1d") or
-    ;; VALUE (concrete "YYYY-MM-DD", from the date picker) sets it.
-    (let* ((clear (alist-get 'clear args))
-           (date (or (alist-get 'when args) (alist-get 'value args)))
-           (ok (cond
-                (clear (glasspane-ui--at-ref args (lambda () (org-schedule '(4))) t))
-                ((and (stringp date) (not (string-empty-p date)))
-                 (glasspane-ui--at-ref args (lambda () (org-schedule nil date)) t)))))
-      (when ok
-        (jetpacs-shell-notify (if clear "Schedule cleared" (format "Scheduled %s" date)))
-        (jetpacs-shell-push))))
-  :doc "Schedule a heading (WHEN relative like \"+1d\", VALUE a date, or CLEAR)."
-  :args '((:name ref :type "ref" :required t)
-          (:name when :type "text")
-          (:name value :type "date")
-          (:name clear :type "bool")))
+  (jetpacs-defaction "heading.todo-set"
+    (lambda (args _)
+      (let* ((state (alist-get 'state args))
+             (clear (equal state "")))
+        (when (and state
+                   (glasspane-ui--at-ref args (lambda () (org-todo (if clear 'none state))) t))
+          (jetpacs-shell-notify (if clear "State cleared" (format "State → %s" state)))
+          (jetpacs-shell-push))))
+    :doc "Set a heading's TODO state; an empty state clears it."
+    :args '((:name ref :type "ref" :required t)
+            (:name state :type "text" :required t)))
 
-(jetpacs-defaction "heading.schedule-time"
-  ;; Adds/updates the clock time on the existing SCHEDULED date (today if
-  ;; none yet). VALUE is the "HH:MM" the time picker injected.
-  (lambda (args _)
-    (let ((time (alist-get 'value args)))
-      (when (and (stringp time) (not (string-empty-p time))
-                 (glasspane-ui--at-ref
+  (jetpacs-defaction "heading.todo-cycle"
+    (lambda (args _)
+      (when (glasspane-ui--at-ref args
+                                  (lambda ()
+                                    (org-todo)
+                                    (unless (org-get-todo-state)
+                                      (org-todo)))
+                                  t)
+        (let* ((marker (jetpacs-org-resolve-ref args))
+               (state (with-current-buffer (marker-buffer marker)
+                        (org-with-wide-buffer
+                         (goto-char marker)
+                         (org-get-todo-state)))))
+          (jetpacs-shell-notify (if state (format "State → %s" state) "State cleared"))
+          (jetpacs-shell-push))))
+    :doc "Cycle a heading through the TODO keyword sequence."
+    :args '((:name ref :type "ref" :required t)))
+
+  (jetpacs-defaction "heading.schedule"
+    (lambda (args _)
+      ;; CLEAR removes the timestamp; otherwise WHEN (relative, e.g. "+1d") or
+      ;; VALUE (concrete "YYYY-MM-DD", from the date picker) sets it.
+      (let* ((clear (alist-get 'clear args))
+             (date (or (alist-get 'when args) (alist-get 'value args)))
+             (ok (cond
+                  (clear (glasspane-ui--at-ref args (lambda () (org-schedule '(4))) t))
+                  ((and (stringp date) (not (string-empty-p date)))
+                   (glasspane-ui--at-ref args (lambda () (org-schedule nil date)) t)))))
+        (when ok
+          (jetpacs-shell-notify (if clear "Schedule cleared" (format "Scheduled %s" date)))
+          (jetpacs-shell-push))))
+    :doc "Schedule a heading (WHEN relative like \"+1d\", VALUE a date, or CLEAR)."
+    :args '((:name ref :type "ref" :required t)
+            (:name when :type "text")
+            (:name value :type "date")
+            (:name clear :type "bool")))
+
+  (jetpacs-defaction "heading.schedule-time"
+    ;; Adds/updates the clock time on the existing SCHEDULED date (today if
+    ;; none yet). VALUE is the "HH:MM" the time picker injected.
+    (lambda (args _)
+      (let ((time (alist-get 'value args)))
+        (when (and (stringp time) (not (string-empty-p time))
+                   (glasspane-ui--at-ref
+                    args
+                    (lambda ()
+                      (let* ((sched (org-entry-get nil "SCHEDULED"))
+                             (date (or (glasspane-ui--ts-date sched)
+                                       (format-time-string "%Y-%m-%d"))))
+                        (org-schedule nil (format "%s %s" date time))))
+                    t))
+          (jetpacs-shell-notify (format "Scheduled %s" time))
+          (jetpacs-shell-push)))))
+
+  (jetpacs-defaction "heading.deadline"
+    (lambda (args _)
+      (let* ((clear (alist-get 'clear args))
+             (date (or (alist-get 'when args) (alist-get 'value args)))
+             (ok (cond
+                  (clear (glasspane-ui--at-ref args (lambda () (org-deadline '(4))) t))
+                  ((and (stringp date) (not (string-empty-p date)))
+                   (glasspane-ui--at-ref args (lambda () (org-deadline nil date)) t)))))
+        (when ok
+          (jetpacs-shell-notify (if clear "Deadline cleared" (format "Deadline %s" date)))
+          (jetpacs-shell-push)))))
+
+  (jetpacs-defaction "heading.priority"
+    (lambda (args _)
+      ;; Empty VALUE means None (remove); otherwise the first char is the priority.
+      (let* ((val (alist-get 'value args))
+             (remove (or (null val) (string-empty-p val)))
+             (ok (glasspane-ui--at-ref
                   args
                   (lambda ()
-                    (let* ((sched (org-entry-get nil "SCHEDULED"))
-                           (date (or (glasspane-ui--ts-date sched)
-                                     (format-time-string "%Y-%m-%d"))))
-                      (org-schedule nil (format "%s %s" date time))))
-                  t))
-        (jetpacs-shell-notify (format "Scheduled %s" time))
-        (jetpacs-shell-push)))))
+                    (if remove (org-priority 'remove)
+                      (org-priority (string-to-char val))))
+                  t)))
+        (when ok
+          (jetpacs-shell-notify (if remove "Priority cleared"
+                                  (format "Priority %s" val)))
+          (jetpacs-shell-push)))))
 
-(jetpacs-defaction "heading.deadline"
-  (lambda (args _)
-    (let* ((clear (alist-get 'clear args))
-           (date (or (alist-get 'when args) (alist-get 'value args)))
-           (ok (cond
-                (clear (glasspane-ui--at-ref args (lambda () (org-deadline '(4))) t))
-                ((and (stringp date) (not (string-empty-p date)))
-                 (glasspane-ui--at-ref args (lambda () (org-deadline nil date)) t)))))
-      (when ok
-        (jetpacs-shell-notify (if clear "Deadline cleared" (format "Deadline %s" date)))
-        (jetpacs-shell-push)))))
+  (jetpacs-defaction "heading.refile"
+    ;; Bridged picker over org-refile targets; refiles the whole subtree.
+    (lambda (args _)
+      (condition-case err
+          (let ((marker (jetpacs-org-resolve-ref args)))
+            (with-current-buffer (marker-buffer marker)
+              (org-with-wide-buffer
+               (goto-char marker)
+               (let* ((org-refile-targets (or org-refile-targets
+                                              '((org-agenda-files :maxlevel . 3))))
+                      (targets (org-refile-get-targets))
+                      (choice (condition-case nil
+                                  (completing-read "Refile to: "
+                                                   (mapcar #'car targets) nil t)
+                                (quit nil)))
+                      (target (and choice (assoc choice targets))))
+                 (if (not target)
+                     (jetpacs-shell-notify "Refile cancelled")
+                   (org-refile nil nil target)
+                   (let ((glasspane-org--inhibit-save-refresh t)
+                         (save-silently t))
+                     (org-save-all-org-buffers))
+                   (jetpacs-org-cache-invalidate 'glasspane)
+                   (setq glasspane-ui--detail-ref nil)
+                   (jetpacs-shell-notify (format "Refiled to %s" choice))))))
+            (jetpacs-shell-push nil :switch-to (jetpacs-shell-current-tab)))
+        (error
+         (jetpacs-shell-notify (format "Refile failed: %s"
+                                       (error-message-string err)))
+         (jetpacs-shell-push)))))
 
-(jetpacs-defaction "heading.priority"
-  (lambda (args _)
-    ;; Empty VALUE means None (remove); otherwise the first char is the priority.
-    (let* ((val (alist-get 'value args))
-           (remove (or (null val) (string-empty-p val)))
-           (ok (glasspane-ui--at-ref
-                args
-                (lambda ()
-                  (if remove (org-priority 'remove)
-                    (org-priority (string-to-char val))))
-                t)))
-      (when ok
-        (jetpacs-shell-notify (if remove "Priority cleared"
-                                (format "Priority %s" val)))
-        (jetpacs-shell-push)))))
+  (jetpacs-defaction "heading.archive"
+    ;; Bridged y/n confirm, then org-archive-subtree; saves source + archive.
+    (lambda (args _)
+      (let ((headline (or (alist-get 'headline args) "this heading")))
+        (if (not (yes-or-no-p (format "Archive \"%s\"? " headline)))
+            (jetpacs-shell-notify "Archive cancelled")
+          (when (glasspane-ui--at-ref
+                 args
+                 (lambda ()
+                   (org-archive-subtree)
+                   (let ((glasspane-org--inhibit-save-refresh t)
+                         (save-silently t))
+                     (org-save-all-org-buffers))))
+            (setq glasspane-ui--detail-ref nil)
+            (jetpacs-shell-notify "Archived")))
+        (jetpacs-shell-push nil :switch-to (jetpacs-shell-current-tab)))))
 
-(jetpacs-defaction "heading.refile"
-  ;; Bridged picker over org-refile targets; refiles the whole subtree.
-  (lambda (args _)
-    (condition-case err
-        (let ((marker (jetpacs-org-resolve-ref args)))
-          (with-current-buffer (marker-buffer marker)
+  (jetpacs-defaction "heading.add-note"
+    ;; Quick logbook note: bridged prompt, written where org-log-into-drawer
+    ;; says notes belong, in org's own note format.
+    (lambda (args _)
+      (let ((note (string-trim (condition-case nil
+                                   (read-string "Note: ")
+                                 (quit "")))))
+        (if (string-empty-p note)
+            (jetpacs-shell-notify "Note cancelled")
+          (when (glasspane-ui--at-ref
+                 args
+                 (lambda ()
+                   (let ((org-log-into-drawer t))
+                     (goto-char (org-log-beginning t))
+                     (insert (format "- Note taken on %s \\\\\n  %s\n"
+                                     (format-time-string
+                                      (org-time-stamp-format t t))
+                                     (replace-regexp-in-string "\n" "\n  " note)))))
+                 t)
+            (jetpacs-shell-notify "Note added")))
+        (jetpacs-shell-push))))
+
+  (jetpacs-defaction "heading.prop-set"
+    ;; VALUE arrives injected by the row input's on-submit; NAME rides in
+    ;; args. An empty value deletes the property.
+    (lambda (args _)
+      (let* ((name (alist-get 'name args))
+             (raw-val (alist-get 'value args))
+             (value (cond
+                     ((eq raw-val t) "t")
+                     ((memq raw-val '(nil :json-false)) "nil")
+                     ((vectorp raw-val) (if (> (length raw-val) 0) (aref raw-val 0) ""))
+                     ((listp raw-val) (if raw-val (car raw-val) ""))
+                     ((stringp raw-val) (string-trim raw-val))
+                     (t (format "%s" raw-val))))
+             (ok (and (stringp name) (not (string-empty-p name))
+                      (glasspane-ui--at-ref
+                       args
+                       (lambda ()
+                         (if (string-empty-p value)
+                             (org-delete-property name)
+                           (org-set-property name value)))
+                       t))))
+        (when ok
+          (jetpacs-shell-notify (if (string-empty-p value)
+                                    (format "Removed %s" name)
+                                  (format "%s → %s" name value)))
+          (jetpacs-shell-push)))))
+
+  (jetpacs-defaction "heading.prop-add"
+    ;; The bridged read-string asks for the key; the new (empty) property
+    ;; then appears as a row whose value column is ready to fill in.
+    (lambda (args _)
+      (let ((name (string-trim (condition-case nil
+                                   (read-string "New property name: ")
+                                 (quit "")))))
+        (cond
+         ((string-empty-p name) nil)
+         ((string-match-p "[: \t]" name)
+          (jetpacs-shell-notify "Property names can't contain colons or spaces"))
+         ((glasspane-ui--at-ref args
+                               (lambda () (org-set-property (upcase name) ""))
+                               t)
+          (jetpacs-shell-notify (format "Added %s — fill in its value" (upcase name)))))
+        (jetpacs-shell-push))))
+
+  (jetpacs-defaction "heading.tags"
+    (lambda (args _)
+      (let* ((val (alist-get 'value args))
+             (tags (cond
+                    ((vectorp val) (append val nil))
+                    ((listp val) val)
+                    ((stringp val) (split-string val "[ \t:,]+" t))
+                    (t nil)))
+             (ok (glasspane-ui--at-ref args (lambda () (org-set-tags tags)) t)))
+        (when ok
+          (jetpacs-shell-notify (if tags (format "Tags: %s" (string-join tags " "))
+                                  "Tags cleared"))
+          (jetpacs-shell-push)))))
+
+  (jetpacs-defaction "heading.clock-in"
+    (lambda (args _)
+      (when (glasspane-ui--at-ref args #'org-clock-in)
+        (jetpacs-shell-notify "Clocked in")
+        (jetpacs-shell-push "clock"))))
+
+  (jetpacs-defaction "org.link.open"
+    ;; A tappable link inside rich org text. Emacs resolves it (id:, file:,
+    ;; http(s):, attachment:, …) via the org link machinery; we report the
+    ;; outcome back as a snackbar since the action itself happens Emacs-side.
+    (lambda (args _)
+      (let ((link (alist-get 'link args)))
+        (when (and (stringp link) (not (string-empty-p link)))
+          (let ((navigated nil))
+            (condition-case err
+                (progn
+                  (org-link-open-from-string link)
+                  (jetpacs-shell-notify (format "Opened %s" link))
+                  (when (derived-mode-p 'org-mode)
+                    (setq glasspane-ui--detail-ref (jetpacs-org-heading-ref))
+                    (setq glasspane-ui--detail-read-mode t)
+                    (setq navigated t)))
+              (error
+               (jetpacs-shell-notify
+                (format "Couldn't open %s: %s" link (error-message-string err)))))
+            (if navigated
+                (jetpacs-shell-push nil :switch-to "glasspane.detail")
+              (jetpacs-shell-push)))))))
+
+  (jetpacs-defaction "heading.reorder"
+    (lambda (args _)
+      (let* ((file      (alist-get 'file args))
+             (from-pos  (alist-get 'from_pos args))
+             (after-pos (alist-get 'after_pos args))  ;; 0 or nil = move to top
+             (new-level (alist-get 'new_level args)))
+        (when (and file from-pos (file-readable-p file))
+          (with-current-buffer (find-file-noselect file)
             (org-with-wide-buffer
-             (goto-char marker)
-             (let* ((org-refile-targets (or org-refile-targets
-                                            '((org-agenda-files :maxlevel . 3))))
-                    (targets (org-refile-get-targets))
-                    (choice (condition-case nil
-                                (completing-read "Refile to: "
-                                                 (mapcar #'car targets) nil t)
-                              (quit nil)))
-                    (target (and choice (assoc choice targets))))
-               (if (not target)
-                   (jetpacs-shell-notify "Refile cancelled")
-                 (org-refile nil nil target)
-                 (let ((glasspane-org--inhibit-save-refresh t)
-                       (save-silently t))
-                   (org-save-all-org-buffers))
-                 (jetpacs-org-cache-invalidate 'glasspane)
-                 (setq glasspane-ui--detail-ref nil)
-                 (jetpacs-shell-notify (format "Refiled to %s" choice))))))
-          (jetpacs-shell-push nil :switch-to (jetpacs-shell-current-tab)))
-      (error
-       (jetpacs-shell-notify (format "Refile failed: %s"
-                                     (error-message-string err)))
-       (jetpacs-shell-push)))))
-
-(jetpacs-defaction "heading.archive"
-  ;; Bridged y/n confirm, then org-archive-subtree; saves source + archive.
-  (lambda (args _)
-    (let ((headline (or (alist-get 'headline args) "this heading")))
-      (if (not (yes-or-no-p (format "Archive \"%s\"? " headline)))
-          (jetpacs-shell-notify "Archive cancelled")
-        (when (glasspane-ui--at-ref
-               args
-               (lambda ()
-                 (org-archive-subtree)
-                 (let ((glasspane-org--inhibit-save-refresh t)
-                       (save-silently t))
-                   (org-save-all-org-buffers))))
-          (setq glasspane-ui--detail-ref nil)
-          (jetpacs-shell-notify "Archived")))
-      (jetpacs-shell-push nil :switch-to (jetpacs-shell-current-tab)))))
-
-(jetpacs-defaction "heading.add-note"
-  ;; Quick logbook note: bridged prompt, written where org-log-into-drawer
-  ;; says notes belong, in org's own note format.
-  (lambda (args _)
-    (let ((note (string-trim (condition-case nil
-                                 (read-string "Note: ")
-                               (quit "")))))
-      (if (string-empty-p note)
-          (jetpacs-shell-notify "Note cancelled")
-        (when (glasspane-ui--at-ref
-               args
-               (lambda ()
-                 (let ((org-log-into-drawer t))
-                   (goto-char (org-log-beginning t))
-                   (insert (format "- Note taken on %s \\\\\n  %s\n"
-                                   (format-time-string
-                                    (org-time-stamp-format t t))
-                                   (replace-regexp-in-string "\n" "\n  " note)))))
-               t)
-          (jetpacs-shell-notify "Note added")))
-      (jetpacs-shell-push))))
-
-(jetpacs-defaction "heading.prop-set"
-  ;; VALUE arrives injected by the row input's on-submit; NAME rides in
-  ;; args. An empty value deletes the property.
-  (lambda (args _)
-    (let* ((name (alist-get 'name args))
-           (raw-val (alist-get 'value args))
-           (value (cond
-                   ((eq raw-val t) "t")
-                   ((memq raw-val '(nil :json-false)) "nil")
-                   ((vectorp raw-val) (if (> (length raw-val) 0) (aref raw-val 0) ""))
-                   ((listp raw-val) (if raw-val (car raw-val) ""))
-                   ((stringp raw-val) (string-trim raw-val))
-                   (t (format "%s" raw-val))))
-           (ok (and (stringp name) (not (string-empty-p name))
-                    (glasspane-ui--at-ref
-                     args
-                     (lambda ()
-                       (if (string-empty-p value)
-                           (org-delete-property name)
-                         (org-set-property name value)))
-                     t))))
-      (when ok
-        (jetpacs-shell-notify (if (string-empty-p value)
-                                  (format "Removed %s" name)
-                                (format "%s → %s" name value)))
-        (jetpacs-shell-push)))))
-
-(jetpacs-defaction "heading.prop-add"
-  ;; The bridged read-string asks for the key; the new (empty) property
-  ;; then appears as a row whose value column is ready to fill in.
-  (lambda (args _)
-    (let ((name (string-trim (condition-case nil
-                                 (read-string "New property name: ")
-                               (quit "")))))
-      (cond
-       ((string-empty-p name) nil)
-       ((string-match-p "[: \t]" name)
-        (jetpacs-shell-notify "Property names can't contain colons or spaces"))
-       ((glasspane-ui--at-ref args
-                             (lambda () (org-set-property (upcase name) ""))
-                             t)
-        (jetpacs-shell-notify (format "Added %s — fill in its value" (upcase name)))))
-      (jetpacs-shell-push))))
-
-(jetpacs-defaction "heading.tags"
-  (lambda (args _)
-    (let* ((val (alist-get 'value args))
-           (tags (cond
-                  ((vectorp val) (append val nil))
-                  ((listp val) val)
-                  ((stringp val) (split-string val "[ \t:,]+" t))
-                  (t nil)))
-           (ok (glasspane-ui--at-ref args (lambda () (org-set-tags tags)) t)))
-      (when ok
-        (jetpacs-shell-notify (if tags (format "Tags: %s" (string-join tags " "))
-                                "Tags cleared"))
-        (jetpacs-shell-push)))))
-
-(jetpacs-defaction "heading.clock-in"
-  (lambda (args _)
-    (when (glasspane-ui--at-ref args #'org-clock-in)
-      (jetpacs-shell-notify "Clocked in")
-      (jetpacs-shell-push "clock"))))
-
-(jetpacs-defaction "org.link.open"
-  ;; A tappable link inside rich org text. Emacs resolves it (id:, file:,
-  ;; http(s):, attachment:, …) via the org link machinery; we report the
-  ;; outcome back as a snackbar since the action itself happens Emacs-side.
-  (lambda (args _)
-    (let ((link (alist-get 'link args)))
-      (when (and (stringp link) (not (string-empty-p link)))
-        (let ((navigated nil))
-          (condition-case err
-              (progn
-                (org-link-open-from-string link)
-                (jetpacs-shell-notify (format "Opened %s" link))
-                (when (derived-mode-p 'org-mode)
-                  (setq glasspane-ui--detail-ref (jetpacs-org-heading-ref))
-                  (setq glasspane-ui--detail-read-mode t)
-                  (setq navigated t)))
-            (error
-             (jetpacs-shell-notify
-              (format "Couldn't open %s: %s" link (error-message-string err)))))
-          (if navigated
-              (jetpacs-shell-push nil :switch-to "glasspane.detail")
-            (jetpacs-shell-push)))))))
-
-(jetpacs-defaction "heading.reorder"
-  (lambda (args _)
-    (let* ((file      (alist-get 'file args))
-           (from-pos  (alist-get 'from_pos args))
-           (after-pos (alist-get 'after_pos args))  ;; 0 or nil = move to top
-           (new-level (alist-get 'new_level args)))
-      (when (and file from-pos (file-readable-p file))
-        (with-current-buffer (find-file-noselect file)
-          (org-with-wide-buffer
-           (goto-char from-pos)
-           (org-back-to-heading t)
-           (let* ((from-level (org-outline-level))
-                  (subtree-beg (point))
-                  (subtree-end (save-excursion (org-end-of-subtree t t) (point)))
-                  (subtree-size (- subtree-end subtree-beg)))
-             ;; Cut the subtree
-             (org-cut-subtree)
-             ;; Navigate to the insertion point
-             (if (and after-pos (> after-pos 0))
-                 (let ((target (if (> after-pos from-pos)
-                                   (- after-pos subtree-size)
-                                 after-pos)))
-                   (goto-char (min target (point-max)))
-                   (org-back-to-heading t)
-                   (org-end-of-subtree t t))
-               ;; Move to top of file (before first heading)
-               (goto-char (point-min))
-               (when (re-search-forward org-heading-regexp nil t)
-                 (goto-char (line-beginning-position))))
-             ;; Paste at the new level (or original level if nil)
-             (org-paste-subtree (or new-level from-level)))))
-        (glasspane-org--save-and-invalidate (find-file-noselect file))
-        (jetpacs-shell-push nil :switch-to "edit")))))
+             (goto-char from-pos)
+             (org-back-to-heading t)
+             (let* ((from-level (org-outline-level))
+                    (subtree-beg (point))
+                    (subtree-end (save-excursion (org-end-of-subtree t t) (point)))
+                    (subtree-size (- subtree-end subtree-beg)))
+               ;; Cut the subtree
+               (org-cut-subtree)
+               ;; Navigate to the insertion point
+               (if (and after-pos (> after-pos 0))
+                   (let ((target (if (> after-pos from-pos)
+                                     (- after-pos subtree-size)
+                                   after-pos)))
+                     (goto-char (min target (point-max)))
+                     (org-back-to-heading t)
+                     (org-end-of-subtree t t))
+                 ;; Move to top of file (before first heading)
+                 (goto-char (point-min))
+                 (when (re-search-forward org-heading-regexp nil t)
+                   (goto-char (line-beginning-position))))
+               ;; Paste at the new level (or original level if nil)
+               (org-paste-subtree (or new-level from-level)))))
+          (glasspane-org--save-and-invalidate (find-file-noselect file))
+          (jetpacs-shell-push nil :switch-to "edit"))))))
 
 (defun glasspane-ui--org-editor-actions (file)
   "Reader/refile toggles and the properties dialog for org FILE."
@@ -1062,110 +1064,111 @@ container would break Compose) and wrap otherwise."
             (jetpacs-action "files.properties.show" :args `((file . ,file)))
             :content-description "Properties")))))
 
-(jetpacs-defaction "files.properties.show"
-  (lambda (args _)
-    (let ((file (alist-get 'file args)))
-      (if (not (and file (stringp file) (file-readable-p file)))
-          (jetpacs-shell-notify (format "Cannot open properties: %s" (or file "no file")))
-        (condition-case err
-            (let* ((buf (or (get-file-buffer file) (find-file-noselect file)))
-                   (kwds (with-current-buffer buf (org-collect-keywords '("TITLE" "CATEGORY" "FILETAGS" "TODO" "SEQ_TODO" "TYP_TODO" "STARTUP" "AUTHOR" "EMAIL" "DATE" "ARCHIVE"))))
-                   (title (car (alist-get "TITLE" kwds nil nil #'equal)))
-                   (category (car (alist-get "CATEGORY" kwds nil nil #'equal)))
-                   (filetags-str (car (alist-get "FILETAGS" kwds nil nil #'equal)))
-                   (filetags (when filetags-str (split-string filetags-str ":" t "[ \t\n\r]+")))
-                   (available-tags (seq-uniq (append filetags (mapcar (lambda (x) (if (consp x) (car x) x)) org-tag-alist))))
-                   (todo-str (or (car (alist-get "TODO" kwds nil nil #'equal))
-                                 (car (alist-get "SEQ_TODO" kwds nil nil #'equal))
-                                 (car (alist-get "TYP_TODO" kwds nil nil #'equal))))
-                   (todo-parts (if todo-str (split-string todo-str "|") nil))
-                   (todo-active (if todo-str (mapconcat #'identity (split-string (car todo-parts) "[ \t]+" t) ", ") ""))
-                   (todo-finished (if (and todo-parts (cadr todo-parts))
-                                      (mapconcat #'identity (split-string (cadr todo-parts) "[ \t]+" t) ", ")
-                                    ""))
-                   (startup (car (alist-get "STARTUP" kwds nil nil #'equal)))
-                   (author (car (alist-get "AUTHOR" kwds nil nil #'equal)))
-                   (email (car (alist-get "EMAIL" kwds nil nil #'equal)))
-                   (date (car (alist-get "DATE" kwds nil nil #'equal)))
-                   (archive (car (alist-get "ARCHIVE" kwds nil nil #'equal))))
-              (jetpacs-send-dialog
-               (jetpacs-scroll-column
-                (jetpacs-text "File Properties" 'title)
-                (jetpacs-text (file-name-nondirectory file) 'caption)
-                (jetpacs-text-input "file-prop-title" :label "Title" :value title :single-line t)
-                (jetpacs-text-input "file-prop-category" :label "Category" :value category :single-line t)
-                (jetpacs-text "File Tags" 'caption nil nil nil nil 8)
-                (jetpacs-enum-list "file-prop-tags" available-tags
-                                :value filetags :multi-select t :allow-add t)
-                (jetpacs-text "TODO Sequence" 'caption nil nil nil nil 8)
-                (jetpacs-text-input "file-prop-todo-active" :label "Active States" :value todo-active :single-line t)
-                (jetpacs-text-input "file-prop-todo-finished" :label "Finished States" :value todo-finished :single-line t)
-                (jetpacs-text "Metadata" 'caption nil nil nil nil 8)
-                (jetpacs-text-input "file-prop-author" :label "Author" :value author :single-line t)
-                (jetpacs-text-input "file-prop-email" :label "Email" :value email :single-line t)
-                (jetpacs-text-input "file-prop-date" :label "Date" :value date :single-line t)
-                (jetpacs-text "Options" 'caption nil nil nil nil 8)
-                (jetpacs-text-input "file-prop-startup" :label "Startup" :value startup :single-line t)
-                (jetpacs-text-input "file-prop-archive" :label "Archive" :value archive :single-line t)
-                (jetpacs-row
-                 (jetpacs-spacer :weight 1)
-                 (jetpacs-button "Cancel" (jetpacs-action "dialog.dismiss") :variant "text")
-                 (jetpacs-spacer :width 8)
-                 (jetpacs-button "Save" (jetpacs-action "files.properties.save" :args `((file . ,file))))))))
-          (error
-           (jetpacs-shell-notify (format "Properties error: %s" (error-message-string err)))))))))
+(with-jetpacs-owner "glasspane"
+  (jetpacs-defaction "files.properties.show"
+    (lambda (args _)
+      (let ((file (alist-get 'file args)))
+        (if (not (and file (stringp file) (file-readable-p file)))
+            (jetpacs-shell-notify (format "Cannot open properties: %s" (or file "no file")))
+          (condition-case err
+              (let* ((buf (or (get-file-buffer file) (find-file-noselect file)))
+                     (kwds (with-current-buffer buf (org-collect-keywords '("TITLE" "CATEGORY" "FILETAGS" "TODO" "SEQ_TODO" "TYP_TODO" "STARTUP" "AUTHOR" "EMAIL" "DATE" "ARCHIVE"))))
+                     (title (car (alist-get "TITLE" kwds nil nil #'equal)))
+                     (category (car (alist-get "CATEGORY" kwds nil nil #'equal)))
+                     (filetags-str (car (alist-get "FILETAGS" kwds nil nil #'equal)))
+                     (filetags (when filetags-str (split-string filetags-str ":" t "[ \t\n\r]+")))
+                     (available-tags (seq-uniq (append filetags (mapcar (lambda (x) (if (consp x) (car x) x)) org-tag-alist))))
+                     (todo-str (or (car (alist-get "TODO" kwds nil nil #'equal))
+                                   (car (alist-get "SEQ_TODO" kwds nil nil #'equal))
+                                   (car (alist-get "TYP_TODO" kwds nil nil #'equal))))
+                     (todo-parts (if todo-str (split-string todo-str "|") nil))
+                     (todo-active (if todo-str (mapconcat #'identity (split-string (car todo-parts) "[ \t]+" t) ", ") ""))
+                     (todo-finished (if (and todo-parts (cadr todo-parts))
+                                        (mapconcat #'identity (split-string (cadr todo-parts) "[ \t]+" t) ", ")
+                                      ""))
+                     (startup (car (alist-get "STARTUP" kwds nil nil #'equal)))
+                     (author (car (alist-get "AUTHOR" kwds nil nil #'equal)))
+                     (email (car (alist-get "EMAIL" kwds nil nil #'equal)))
+                     (date (car (alist-get "DATE" kwds nil nil #'equal)))
+                     (archive (car (alist-get "ARCHIVE" kwds nil nil #'equal))))
+                (jetpacs-send-dialog
+                 (jetpacs-scroll-column
+                  (jetpacs-text "File Properties" 'title)
+                  (jetpacs-text (file-name-nondirectory file) 'caption)
+                  (jetpacs-text-input "file-prop-title" :label "Title" :value title :single-line t)
+                  (jetpacs-text-input "file-prop-category" :label "Category" :value category :single-line t)
+                  (jetpacs-text "File Tags" 'caption nil nil nil nil 8)
+                  (jetpacs-enum-list "file-prop-tags" available-tags
+                                  :value filetags :multi-select t :allow-add t)
+                  (jetpacs-text "TODO Sequence" 'caption nil nil nil nil 8)
+                  (jetpacs-text-input "file-prop-todo-active" :label "Active States" :value todo-active :single-line t)
+                  (jetpacs-text-input "file-prop-todo-finished" :label "Finished States" :value todo-finished :single-line t)
+                  (jetpacs-text "Metadata" 'caption nil nil nil nil 8)
+                  (jetpacs-text-input "file-prop-author" :label "Author" :value author :single-line t)
+                  (jetpacs-text-input "file-prop-email" :label "Email" :value email :single-line t)
+                  (jetpacs-text-input "file-prop-date" :label "Date" :value date :single-line t)
+                  (jetpacs-text "Options" 'caption nil nil nil nil 8)
+                  (jetpacs-text-input "file-prop-startup" :label "Startup" :value startup :single-line t)
+                  (jetpacs-text-input "file-prop-archive" :label "Archive" :value archive :single-line t)
+                  (jetpacs-row
+                   (jetpacs-spacer :weight 1)
+                   (jetpacs-button "Cancel" (jetpacs-action "dialog.dismiss") :variant "text")
+                   (jetpacs-spacer :width 8)
+                   (jetpacs-button "Save" (jetpacs-action "files.properties.save" :args `((file . ,file))))))))
+            (error
+             (jetpacs-shell-notify (format "Properties error: %s" (error-message-string err)))))))))
 
-(jetpacs-defaction "files.properties.save"
-  (lambda (args _)
-    (let* ((file (alist-get 'file args))
-           (buf (or (get-file-buffer file) (find-file-noselect file)))
-           (title (jetpacs-ui-state "file-prop-title"))
-           (category (jetpacs-ui-state "file-prop-category"))
-           (tags-val (jetpacs-ui-state "file-prop-tags"))
-           (tags (cond
-                  ((vectorp tags-val) (append tags-val nil))
-                  ((listp tags-val) tags-val)
-                  (t nil)))
-           (todo-active (jetpacs-ui-state "file-prop-todo-active"))
-           (todo-finished (jetpacs-ui-state "file-prop-todo-finished"))
-           (todo-str (let ((a (when (stringp todo-active) (string-join (split-string todo-active "[ \t]*,[ \t]*" t) " ")))
-                           (f (when (stringp todo-finished) (string-join (split-string todo-finished "[ \t]*,[ \t]*" t) " "))))
-                       (if (and a f (not (string-empty-p a)) (not (string-empty-p f)))
-                           (concat a " | " f)
-                         (or a f))))
-           (startup (jetpacs-ui-state "file-prop-startup"))
-           (author (jetpacs-ui-state "file-prop-author"))
-           (email (jetpacs-ui-state "file-prop-email"))
-           (date (jetpacs-ui-state "file-prop-date"))
-           (archive (jetpacs-ui-state "file-prop-archive")))
-      (with-current-buffer buf
-        (save-excursion
-          (save-restriction
-            (widen)
-            (let ((update-kwd (lambda (kwd val)
-                                (goto-char (point-min))
-                                (if (re-search-forward (format "^[ \t]*#\\+%s:[ \t]*\\(.*\\)$" kwd) nil t)
-                                    (if (and val (not (string-empty-p val)))
-                                        (replace-match val t t nil 1)
-                                      (delete-region (line-beginning-position) (min (1+ (line-end-position)) (point-max))))
-                                  (when (and val (not (string-empty-p val)))
-                                    (goto-char (point-min))
-                                    ;; If inserting something else than TITLE and a TITLE exists, insert after it.
-                                    (when (not (equal kwd "TITLE"))
-                                      (when (re-search-forward "^[ \t]*#\\+TITLE:.*$" nil t)
-                                        (forward-line 1)))
-                                    (insert (format "#+%s: %s\n" kwd val)))))))
-              (funcall update-kwd "TITLE" title)
-              (funcall update-kwd "FILETAGS" (when tags (concat ":" (string-join tags ":") ":")))
-              (funcall update-kwd "CATEGORY" category)
-              (funcall update-kwd "TODO" todo-str)
-              (funcall update-kwd "STARTUP" startup)
-              (funcall update-kwd "AUTHOR" author)
-              (funcall update-kwd "EMAIL" email)
-              (funcall update-kwd "DATE" date)
-              (funcall update-kwd "ARCHIVE" archive))
-            (glasspane-org--save-and-invalidate))))
-      (jetpacs-dismiss-dialog)
-      (jetpacs-shell-push))))
+  (jetpacs-defaction "files.properties.save"
+    (lambda (args _)
+      (let* ((file (alist-get 'file args))
+             (buf (or (get-file-buffer file) (find-file-noselect file)))
+             (title (jetpacs-ui-state "file-prop-title"))
+             (category (jetpacs-ui-state "file-prop-category"))
+             (tags-val (jetpacs-ui-state "file-prop-tags"))
+             (tags (cond
+                    ((vectorp tags-val) (append tags-val nil))
+                    ((listp tags-val) tags-val)
+                    (t nil)))
+             (todo-active (jetpacs-ui-state "file-prop-todo-active"))
+             (todo-finished (jetpacs-ui-state "file-prop-todo-finished"))
+             (todo-str (let ((a (when (stringp todo-active) (string-join (split-string todo-active "[ \t]*,[ \t]*" t) " ")))
+                             (f (when (stringp todo-finished) (string-join (split-string todo-finished "[ \t]*,[ \t]*" t) " "))))
+                         (if (and a f (not (string-empty-p a)) (not (string-empty-p f)))
+                             (concat a " | " f)
+                           (or a f))))
+             (startup (jetpacs-ui-state "file-prop-startup"))
+             (author (jetpacs-ui-state "file-prop-author"))
+             (email (jetpacs-ui-state "file-prop-email"))
+             (date (jetpacs-ui-state "file-prop-date"))
+             (archive (jetpacs-ui-state "file-prop-archive")))
+        (with-current-buffer buf
+          (save-excursion
+            (save-restriction
+              (widen)
+              (let ((update-kwd (lambda (kwd val)
+                                  (goto-char (point-min))
+                                  (if (re-search-forward (format "^[ \t]*#\\+%s:[ \t]*\\(.*\\)$" kwd) nil t)
+                                      (if (and val (not (string-empty-p val)))
+                                          (replace-match val t t nil 1)
+                                        (delete-region (line-beginning-position) (min (1+ (line-end-position)) (point-max))))
+                                    (when (and val (not (string-empty-p val)))
+                                      (goto-char (point-min))
+                                      ;; If inserting something else than TITLE and a TITLE exists, insert after it.
+                                      (when (not (equal kwd "TITLE"))
+                                        (when (re-search-forward "^[ \t]*#\\+TITLE:.*$" nil t)
+                                          (forward-line 1)))
+                                      (insert (format "#+%s: %s\n" kwd val)))))))
+                (funcall update-kwd "TITLE" title)
+                (funcall update-kwd "FILETAGS" (when tags (concat ":" (string-join tags ":") ":")))
+                (funcall update-kwd "CATEGORY" category)
+                (funcall update-kwd "TODO" todo-str)
+                (funcall update-kwd "STARTUP" startup)
+                (funcall update-kwd "AUTHOR" author)
+                (funcall update-kwd "EMAIL" email)
+                (funcall update-kwd "DATE" date)
+                (funcall update-kwd "ARCHIVE" archive))
+              (glasspane-org--save-and-invalidate))))
+        (jetpacs-dismiss-dialog)
+        (jetpacs-shell-push)))))
 
 (provide 'glasspane-detail)

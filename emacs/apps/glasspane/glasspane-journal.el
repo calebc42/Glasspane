@@ -200,10 +200,11 @@ orgro timestamp-tap-edit item folds in here."
                      (glasspane-ui--clock-body)))))
      :snackbar snackbar)))
 
-(jetpacs-shell-define-view "glasspane.journal"
-                        :builder #'glasspane-journal--view
-                        :tab '(:icon "today" :label "Journal")
-                        :order 15)
+(with-jetpacs-owner "glasspane"
+  (jetpacs-shell-define-view "glasspane.journal"
+                          :builder #'glasspane-journal--view
+                          :tab '(:icon "today" :label "Journal")
+                          :order 15))
 
 ;; ─── Landing & state resets ──────────────────────────────────────────────────
 
@@ -238,43 +239,44 @@ not exist in jetpacs 1.5.0; until it does, this seam stays on the raw var."
 
 ;; ─── Actions ─────────────────────────────────────────────────────────────────
 
-(jetpacs-defaction "journal.nav"
-  (lambda (args _)
-    (let ((delta (alist-get 'delta args)))
-      (when (integerp delta)
-        (setq glasspane-journal--date
-              (glasspane-ui--shift-date (glasspane-journal--current)
-                                        delta 'day))
-        (jetpacs-shell-push)))))
+(with-jetpacs-owner "glasspane"
+  (jetpacs-defaction "journal.nav"
+    (lambda (args _)
+      (let ((delta (alist-get 'delta args)))
+        (when (integerp delta)
+          (setq glasspane-journal--date
+                (glasspane-ui--shift-date (glasspane-journal--current)
+                                          delta 'day))
+          (jetpacs-shell-push)))))
 
-(jetpacs-defaction "journal.goto"
-  (lambda (args _)
-    (let ((date (alist-get 'value args)))
-      (when (and (stringp date)
-                 (string-match-p
-                  "\\`[0-9]\\{4\\}-[0-9]\\{2\\}-[0-9]\\{2\\}\\'" date))
-        (setq glasspane-journal--date date)
-        (jetpacs-shell-push)))))
+  (jetpacs-defaction "journal.goto"
+    (lambda (args _)
+      (let ((date (alist-get 'value args)))
+        (when (and (stringp date)
+                   (string-match-p
+                    "\\`[0-9]\\{4\\}-[0-9]\\{2\\}-[0-9]\\{2\\}\\'" date))
+          (setq glasspane-journal--date date)
+          (jetpacs-shell-push)))))
 
-(jetpacs-defaction "journal.today"
-  (lambda (_args _)
-    (setq glasspane-journal--date nil)
-    (jetpacs-shell-push)))
+  (jetpacs-defaction "journal.today"
+    (lambda (_args _)
+      (setq glasspane-journal--date nil)
+      (jetpacs-shell-push)))
 
-(jetpacs-defaction "journal.capture"
-  (lambda (args _)
-    (let ((text (string-trim (or (alist-get 'value args) "")))
-          (date (alist-get 'date args)))
-      (unless (string-empty-p text)
-        (glasspane-journal--append
-         text (and (stringp date) (not (string-empty-p date)) date))
-        ;; Rotate the input id: the re-render clears the field.
-        (jetpacs-form-reset (glasspane-journal--capture-form))
-        (jetpacs-shell-notify "Added to journal")
-        (jetpacs-shell-push))))
-  :doc "Append text to the current journal day."
-  :args '((:name value :type "text" :required t)
-          (:name date :type "date")))
+  (jetpacs-defaction "journal.capture"
+    (lambda (args _)
+      (let ((text (string-trim (or (alist-get 'value args) "")))
+            (date (alist-get 'date args)))
+        (unless (string-empty-p text)
+          (glasspane-journal--append
+           text (and (stringp date) (not (string-empty-p date)) date))
+          ;; Rotate the input id: the re-render clears the field.
+          (jetpacs-form-reset (glasspane-journal--capture-form))
+          (jetpacs-shell-notify "Added to journal")
+          (jetpacs-shell-push))))
+    :doc "Append text to the current journal day."
+    :args '((:name value :type "text" :required t)
+            (:name date :type "date"))))
 
 (provide 'glasspane-journal)
 ;;; glasspane-journal.el ends here

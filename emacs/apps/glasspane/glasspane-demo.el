@@ -823,28 +823,29 @@ Returns the directory the files were written to."
       (message "Jetpacs demo files written to %s" dir))
     dir))
 
-(jetpacs-defaction "demo.setup"
-  ;; Allowlisted and argument-free: always writes the fixed file set into
-  ;; `glasspane-demo-directory' — nothing on the wire chooses paths or content.
-  (lambda (_ _)
-    (glasspane-demo-setup)
-    (when (fboundp 'jetpacs-shell-notify)
-      (jetpacs-shell-notify
-       (format "Demo files in %s"
-               (abbreviate-file-name
-                (expand-file-name glasspane-demo-directory)))))))
-
-(jetpacs-defaction "demo.setup-org"
-  ;; Same shape as demo.setup: argument-free, fixed file set, fixed target
-  ;; (`org-directory').  Overwrites the six corpus files — reset-to-pristine
-  ;; is the point — but never touches anything else in the directory.
-  (lambda (_ _)
-    (let ((dir (glasspane-demo-setup-org)))
+(with-jetpacs-owner "glasspane"
+  (jetpacs-defaction "demo.setup"
+    ;; Allowlisted and argument-free: always writes the fixed file set into
+    ;; `glasspane-demo-directory' — nothing on the wire chooses paths or content.
+    (lambda (_ _)
+      (glasspane-demo-setup)
       (when (fboundp 'jetpacs-shell-notify)
         (jetpacs-shell-notify
-         (format "Demo org corpus in %s" (abbreviate-file-name dir)))))
-    (when (fboundp 'jetpacs-shell-push)
-      (jetpacs-shell-push))))
+         (format "Demo files in %s"
+                 (abbreviate-file-name
+                  (expand-file-name glasspane-demo-directory)))))))
+
+  (jetpacs-defaction "demo.setup-org"
+    ;; Same shape as demo.setup: argument-free, fixed file set, fixed target
+    ;; (`org-directory').  Overwrites the six corpus files — reset-to-pristine
+    ;; is the point — but never touches anything else in the directory.
+    (lambda (_ _)
+      (let ((dir (glasspane-demo-setup-org)))
+        (when (fboundp 'jetpacs-shell-notify)
+          (jetpacs-shell-notify
+           (format "Demo org corpus in %s" (abbreviate-file-name dir)))))
+      (when (fboundp 'jetpacs-shell-push)
+        (jetpacs-shell-push)))))
 
 (provide 'glasspane-demo)
 ;;; glasspane-demo.el ends here

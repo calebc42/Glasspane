@@ -50,6 +50,9 @@ rules that left the file."
               ":PROPERTIES:\n:TRIGGER: power connected\n:END:\n"
               "#+begin_src elisp\n(setq jetpacs-tests--autom-fired data)\n#+end_src\n")
     (glasspane-automations-reload)
+    ;; Reload binds the owner itself (it also fires from the after-save
+    ;; hook, where no load-time binding exists).
+    (should (equal "glasspane" (jetpacs--owner-of "trigger" "org/Charge sync")))
     (setq jetpacs-tests--autom-fired nil)
     (jetpacs-trigger-test-fire "org/Charge sync")
     ;; Test fires carry no data payload; args reached the handler.

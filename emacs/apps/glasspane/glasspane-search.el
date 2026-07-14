@@ -16,8 +16,9 @@
   (jetpacs-shell-nav-view "Search" (glasspane-ui--search-body)
                        :snackbar snackbar))
 
-(jetpacs-shell-define-view "glasspane.search" :builder #'glasspane-ui--search-view
-                        :order 70)
+(with-jetpacs-owner "glasspane"
+  (jetpacs-shell-define-view "glasspane.search" :builder #'glasspane-ui--search-view
+                          :order 70))
 
 (defun glasspane-ui--search-builder-section (key label summary widget)
   "One collapsible filter section of the query builder.
@@ -191,33 +192,34 @@ Returns \"\" when every filter is at its resting value."
           ((null (cdr clauses)) (format "%S" (car clauses)))
           (t (format "%S" `(and ,@clauses))))))
 
-(jetpacs-defaction "org.search.run"
-  ;; The query arrives as the search field's submitted `value'. Run it,
-  ;; cache the results, and land the user on the search view.
-  (lambda (args _)
-    (glasspane-ui--run-search (or (alist-get 'value args) ""))
-    (jetpacs-shell-push nil :switch-to "glasspane.search")))
+(with-jetpacs-owner "glasspane"
+  (jetpacs-defaction "org.search.run"
+    ;; The query arrives as the search field's submitted `value'. Run it,
+    ;; cache the results, and land the user on the search view.
+    (lambda (args _)
+      (glasspane-ui--run-search (or (alist-get 'value args) ""))
+      (jetpacs-shell-push nil :switch-to "glasspane.search")))
 
-(jetpacs-defaction "search.update-filter"
-  ;; A builder filter changed: rebuild the org-ql query from the whole
-  ;; filter state and run it immediately — the results and the query
-  ;; text update together, no extra Search tap needed.
-  (lambda (args _)
-    (jetpacs-ui-state-put (concat "search-filter-" (alist-get 'field args))
-                       (alist-get 'value args))
-    (glasspane-ui--run-search (glasspane-ui--search-filter-query))
-    (jetpacs-shell-push)))
+  (jetpacs-defaction "search.update-filter"
+    ;; A builder filter changed: rebuild the org-ql query from the whole
+    ;; filter state and run it immediately — the results and the query
+    ;; text update together, no extra Search tap needed.
+    (lambda (args _)
+      (jetpacs-ui-state-put (concat "search-filter-" (alist-get 'field args))
+                         (alist-get 'value args))
+      (glasspane-ui--run-search (glasspane-ui--search-filter-query))
+      (jetpacs-shell-push)))
 
-(jetpacs-defaction "search.by-tag"
-  ;; A tag chip tap: reset the builder to just that tag, then run the
-  ;; same query the builder would generate, so the search field shows a
-  ;; query the user can retype or edit.
-  (lambda (args _)
-    (jetpacs-ui-state-clear "search-filter-")
-    (jetpacs-ui-state-put "search-filter-tags" (vector (alist-get 'tag args)))
-    (glasspane-ui--run-search (glasspane-ui--search-filter-query))
-    (jetpacs-shell-push nil :switch-to "glasspane.search"))
-  :doc "Filter search to a single tag."
-  :args '((:name tag :type "text" :required t)))
+  (jetpacs-defaction "search.by-tag"
+    ;; A tag chip tap: reset the builder to just that tag, then run the
+    ;; same query the builder would generate, so the search field shows a
+    ;; query the user can retype or edit.
+    (lambda (args _)
+      (jetpacs-ui-state-clear "search-filter-")
+      (jetpacs-ui-state-put "search-filter-tags" (vector (alist-get 'tag args)))
+      (glasspane-ui--run-search (glasspane-ui--search-filter-query))
+      (jetpacs-shell-push nil :switch-to "glasspane.search"))
+    :doc "Filter search to a single tag."
+    :args '((:name tag :type "text" :required t))))
 
 (provide 'glasspane-search)
