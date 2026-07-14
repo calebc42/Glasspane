@@ -444,3 +444,38 @@ FTS grep direction, and Task 22's native-comp rung.
 - [ ] **Broken bundle never bricks boot:** stage a deliberately truncated
       app bundle, restart → a warning names the bundle, its stale `.elc`
       is gone, Emacs boots and the bridge connects.
+
+## 20. Composer pack targeting (Stage 4 / S4.5 — 2026-07-13, composer branch claude/stage-4-pack-targeting)
+
+The composer's batch-side acceptance is green (the glasspane-views.org
+recreation renders + mutates against a manifest-shaped double; pack
+present/missing/incompatible all fail closed). These rows are the
+on-device half: the REAL Glasspane pack behind the same document.
+
+Prereqs: Glasspane installed and registered on the device (its elisp
+provides the `glasspane` feature and the glasspane.org/glasspane.notes
+sources + annotated actions); the composer bundle for
+`glasspane-views.org` exported against the committed
+`glasspane-pack.json` (the bundle embeds the trusted
+`jetpacs-crud-pack-register` form); engines present per §-relevant
+rows above.
+
+- [ ] **Bundle adopts on-device:** stage `jetpacs-app-glasspane-views.el`
+      → restart → launcher shows "Glasspane views" with five tabs
+      (Tasks, Board, Calendar, Journal, Backlinks).
+- [ ] **Saved views render live data:** Tasks lists real TODO headings
+      from the vault (via `glasspane.org` + the `(todo)` query); Board
+      and Calendar render from the same source; Journal shows only
+      journal-tagged entries.
+- [ ] **Backlinks binds named params:** edit the Backlinks view's
+      `:FILTER:` to a real note's `id=<ID> relation=backlinks` →
+      re-render lists that note's actual backlinks.
+- [ ] **One mutation round-trips:** tap `heading.todo-cycle` on a Tasks
+      card → the org file's TODO keyword cycles on disk; pull-to-refresh
+      shows the new state (and Glasspane's own agenda agrees).
+- [ ] **Pack missing fails closed:** on a device WITHOUT Glasspane, the
+      same bundle loads; every view renders "… is unavailable" naming
+      the pack; no FAB, no export buttons, taps dispatch nothing.
+- [ ] **Version gate:** bump the document's `#+JETPACS_PACK: glasspane`
+      minimum above the installed pack_version, redeploy → views degrade
+      with the "needs pack ≥ …" caption.
