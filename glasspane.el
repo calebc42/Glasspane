@@ -2680,8 +2680,11 @@ companion gets `glasspane-ui--agenda-month-fallback' — the composed
          (apply #'jetpacs-lazy-column (mapcar #'glasspane-ui--agenda-card selected-items))
        (jetpacs-text "No events" 'caption)))))
 
-(defun glasspane-ui--agenda-month-fallback (items-by-date anchor selected-date)
-  "The composed month grid for companions that predate `month_grid'."
+(defun glasspane-ui--agenda-month-fallback (items-by-date anchor selected-date
+                                                       &optional select-action)
+  "The composed month grid for companions that predate `month_grid'.
+SELECT-ACTION (default \"agenda.select-date\") receives the tapped
+day as its `date' arg — saved views pass their own handler."
   (let* ((month (string-to-number (substring anchor 5 7)))
          (year (string-to-number (substring anchor 0 4)))
          (days-in-month (calendar-last-day-of-month month year))
@@ -2711,7 +2714,8 @@ companion gets `glasspane-ui--agenda-month-fallback' — the composed
                                       (jetpacs-spacer :height 8)))
                                    :color bg-color :shape "rounded" :padding 4))))
               (push (jetpacs-box cell-content :weight 1 :alignment "center"
-                              :on-tap (jetpacs-action "agenda.select-date" :args `((date . ,date-str))))
+                              :on-tap (jetpacs-action (or select-action "agenda.select-date")
+                                                   :args `((date . ,date-str))))
                     row-cells)
               (setq current-day (1+ current-day)))))
         (push (apply #'jetpacs-row (nreverse row-cells)) grid-rows)))
@@ -5253,6 +5257,7 @@ not exist in jetpacs 1.5.0; until it does, this seam stays on the raw var."
 (require 'jetpacs-settings)
 (require 'glasspane-org)
 (require 'glasspane-ui)
+(require 'glasspane-agenda)             ; date helpers + the month fallback grid
 
 (defcustom glasspane-saved-views nil
   "Saved query views: a list of alists with `name', `query', `rendering'.
@@ -5521,26 +5526,59 @@ vanish from the board."
                  :padding 4)))
             columns))))
 
-(defun glasspane-views--calendar-nodes (items)
-  "The agenda rendering: items grouped by scheduled date, ascending."
-  (let ((buckets (make-hash-table :test 'equal)))
-    (dolist (item items)
-      (let ((date (or (glasspane-ui--ts-date (alist-get 'scheduled item))
-                     "")))
-        (puthash date (cons item (gethash date buckets)) buckets)))
-    (let ((dates (sort (hash-table-keys buckets)
-                       (lambda (a b)
-                         ;; Unscheduled ("" sorts first) goes last.
-                         (cond ((string-empty-p a) nil)
-                               ((string-empty-p b) t)
-                               (t (string< a b)))))))
-      (cl-loop for date in dates
-               append
-               (cons (jetpacs-section-header
-                      (if (string-empty-p date) "Unscheduled"
-                        (glasspane-ui--format-date date "%a, %b %e")))
-                     (mapcar #'glasspane-views--card
-                             (nreverse (gethash date buckets))))))))
+(defun glasspane-views--calendar-node (items)
+  "The calendar rendering: a month grid over ITEMS' scheduled dates.
+The curated `month_grid' when the companion has it (marks = item
+count per day, month swipe), the composed fallback grid otherwise;
+below it the selected day's cards and the Unscheduled section.
+Anchor month and selection live in UI state under \"views-cal-\",
+cleared when a view opens or closes."
+  (let* ((today (format-time-string "%Y-%m-%d"))
+         (anchor (or (jetpacs-ui-state "views-cal-anchor") today))
+         (month-prefix (substring anchor 0 7))
+         (sel (jetpacs-ui-state "views-cal-selected"))
+         ;; A remembered selection only counts inside the shown month;
+         ;; otherwise select today (when visible) or the anchor day.
+         (selected-date (cond
+                         ((and (stringp sel) (string-prefix-p month-prefix sel)) sel)
+                         ((string-prefix-p month-prefix today) today)
+                         (t anchor)))
+         (items-by-date (seq-group-by
+                         (lambda (it)
+                           (glasspane-ui--ts-date (alist-get 'scheduled it)))
+                         items))
+         (unscheduled (cdr (assoc nil items-by-date)))
+         (selected-items (cdr (assoc selected-date items-by-date))))
+    (apply #'jetpacs-column
+           (delq nil
+                 (list
+                  (jetpacs-node-or "month_grid"
+                      (jetpacs-month-grid month-prefix
+                                       :marks (delq nil
+                                                    (mapcar
+                                                     (lambda (g)
+                                                       (and (stringp (car g))
+                                                            (cons (car g)
+                                                                  (length (cdr g)))))
+                                                     items-by-date))
+                                       :selected selected-date
+                                       :on-day-tap (jetpacs-action "views.cal.select-date")
+                                       :on-month-change (jetpacs-action "views.cal.set-month"))
+                    (glasspane-ui--agenda-month-fallback
+                     items-by-date anchor selected-date "views.cal.select-date"))
+                  (jetpacs-divider)
+                  (jetpacs-section-header (format "Events for %s" selected-date))
+                  (if selected-items
+                      (apply #'jetpacs-column
+                             (mapcar #'glasspane-views--card selected-items))
+                    (jetpacs-text "No events" 'caption))
+                  (when unscheduled (jetpacs-divider))
+                  (when unscheduled
+                    (jetpacs-section-header
+                     (format "Unscheduled (%d)" (length unscheduled))))
+                  (when unscheduled
+                    (apply #'jetpacs-column
+                           (mapcar #'glasspane-views--card unscheduled))))))))
 
 ;; ─── The two screens (one shell view) ────────────────────────────────────────
 
@@ -5595,7 +5633,7 @@ vanish from the board."
                                                         (alist-get 'query view)))))
               (t (pcase rendering
                    ("board" (list (glasspane-views--board-node items)))
-                   ("calendar" (glasspane-views--calendar-nodes items))
+                   ("calendar" (list (glasspane-views--calendar-node items)))
                    (_ (if (and glasspane-views--reorder file)
                           (list (glasspane-views--reorder-node items file))
                         (list (glasspane-views--table-node items)))))))))
@@ -5685,6 +5723,7 @@ Field ids come from the `jetpacs-form' registry; views.save reads them."
         (when (glasspane-views--get name)
           (setq glasspane-views--current name
                 glasspane-views--reorder nil)
+          (jetpacs-ui-state-clear "views-cal-")
           (jetpacs-shell-push nil :switch-to "glasspane.views"))))
     :doc "Open a saved view by name."
     :args '((:name name :type "text" :required t)))
@@ -5693,12 +5732,33 @@ Field ids come from the `jetpacs-form' registry; views.save reads them."
     (lambda (_args _)
       (setq glasspane-views--current nil
             glasspane-views--reorder nil)
+      (jetpacs-ui-state-clear "views-cal-")
       (jetpacs-shell-push nil :switch-to "glasspane.views")))
 
   (jetpacs-defaction "views.reorder"
     (lambda (_args _)
       (setq glasspane-views--reorder (not glasspane-views--reorder))
       (jetpacs-shell-push)))
+
+  (jetpacs-defaction "views.cal.select-date"
+    ;; `date' comes from the composed fallback grid's per-cell args;
+    ;; `value' is what the curated month_grid's on_day_tap injects.
+    (lambda (args _)
+      (let ((date (or (alist-get 'date args) (alist-get 'value args))))
+        (when (and (stringp date)
+                   (string-match-p "\\`[0-9]\\{4\\}-[0-9]\\{2\\}-[0-9]\\{2\\}\\'" date))
+          (jetpacs-ui-state-put "views-cal-selected" date)
+          (jetpacs-shell-push)))))
+
+  (jetpacs-defaction "views.cal.set-month"
+    ;; The curated grid navigates companion-locally and reports the
+    ;; shown month; re-anchoring pushes fresh marks for it.
+    (lambda (args _)
+      (let ((month (alist-get 'value args)))
+        (when (and (stringp month)
+                   (string-match-p "\\`[0-9]\\{4\\}-[0-9]\\{2\\}\\'" month))
+          (jetpacs-ui-state-put "views-cal-anchor" (concat month "-01"))
+          (jetpacs-shell-push)))))
 
   (jetpacs-defaction "views.rendering"
     (lambda (args _)

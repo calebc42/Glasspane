@@ -292,8 +292,11 @@ companion gets `glasspane-ui--agenda-month-fallback' — the composed
          (apply #'jetpacs-lazy-column (mapcar #'glasspane-ui--agenda-card selected-items))
        (jetpacs-text "No events" 'caption)))))
 
-(defun glasspane-ui--agenda-month-fallback (items-by-date anchor selected-date)
-  "The composed month grid for companions that predate `month_grid'."
+(defun glasspane-ui--agenda-month-fallback (items-by-date anchor selected-date
+                                                       &optional select-action)
+  "The composed month grid for companions that predate `month_grid'.
+SELECT-ACTION (default \"agenda.select-date\") receives the tapped
+day as its `date' arg — saved views pass their own handler."
   (let* ((month (string-to-number (substring anchor 5 7)))
          (year (string-to-number (substring anchor 0 4)))
          (days-in-month (calendar-last-day-of-month month year))
@@ -323,7 +326,8 @@ companion gets `glasspane-ui--agenda-month-fallback' — the composed
                                       (jetpacs-spacer :height 8)))
                                    :color bg-color :shape "rounded" :padding 4))))
               (push (jetpacs-box cell-content :weight 1 :alignment "center"
-                              :on-tap (jetpacs-action "agenda.select-date" :args `((date . ,date-str))))
+                              :on-tap (jetpacs-action (or select-action "agenda.select-date")
+                                                   :args `((date . ,date-str))))
                     row-cells)
               (setq current-day (1+ current-day)))))
         (push (apply #'jetpacs-row (nreverse row-cells)) grid-rows)))

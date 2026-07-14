@@ -21,8 +21,7 @@
       (should (string-search "NEXT (1)" json))
       (should (string-search "heading.todo-set" json)))
     (let ((json (json-serialize (jetpacs-tests--canon
-                                 (apply #'jetpacs-column
-                                        (glasspane-views--calendar-nodes items)))
+                                 (glasspane-views--calendar-node items))
                                 :null-object :null :false-object :false)))
       (should (string-search "Unscheduled" json))
       (should (string-search "Ship it" json)))))
@@ -35,8 +34,7 @@ lints clean under the 1.11 node schema."
         (org-todo-keywords-1 '("TODO" "NEXT" "DONE")))
     (let ((table (glasspane-views--table-node items))
           (board (glasspane-views--board-node items))
-          (calendar (apply #'jetpacs-column
-                           (glasspane-views--calendar-nodes items))))
+          (calendar (glasspane-views--calendar-node items)))
       (should-not (jetpacs-lint-spec table))
       (should-not (jetpacs-lint-spec board))
       (should-not (jetpacs-lint-spec calendar))
@@ -49,6 +47,66 @@ lints clean under the 1.11 node schema."
       (let ((json (json-serialize (jetpacs-tests--canon board)
                                   :null-object :null :false-object :false)))
         (should (string-search "a.org" json))))))   ; caption file basename
+
+(ert-deftest glasspane-views-month-grid-calendar ()
+  "The calendar rendering is a month grid: curated node under a
+supported mock, the composed fallback (dispatching views.cal.select-date)
+on the real disconnected predicate; the Unscheduled section survives."
+  (let ((items '(((headline . "Meet") (todo . "TODO") (tags . [])
+                  (scheduled . "<2026-07-10 Fri>")
+                  (ref . ((file . "/tmp/a.org") (pos . 1))))
+                 ((headline . "Loose end") (todo . "TODO") (tags . [])
+                  (scheduled . nil)
+                  (ref . ((file . "/tmp/a.org") (pos . 30))))))
+        (jetpacs--ui-state (make-hash-table :test 'equal)))
+    (jetpacs-ui-state-put "views-cal-anchor" "2026-07-01")
+    (jetpacs-ui-state-put "views-cal-selected" "2026-07-10")
+    ;; Curated branch.
+    (cl-letf (((symbol-function 'jetpacs-node-supported-p) (lambda (_) t)))
+      (let* ((node (glasspane-views--calendar-node items))
+             (json (jetpacs-render-to-json node))
+             (grid (seq-find (lambda (c) (equal "month_grid" (alist-get 't c)))
+                             (append (alist-get 'children json) nil))))
+        (should-not (jetpacs-lint-spec node))
+        (should grid)
+        (should (equal "2026-07" (alist-get 'month grid)))
+        (should (equal "2026-07-10" (alist-get 'selected grid)))
+        (should (equal "views.cal.select-date"
+                       (alist-get 'action (alist-get 'on_day_tap grid))))
+        (should (equal "views.cal.set-month"
+                       (alist-get 'action (alist-get 'on_month_change grid)))))
+      (let ((json (json-serialize (jetpacs-tests--canon
+                                   (glasspane-views--calendar-node items))
+                                  :null-object :null :false-object :false)))
+        (should (string-search "Meet" json))
+        (should (string-search "Unscheduled (1)" json))
+        (should (string-search "Loose end" json))))
+    ;; Fallback branch: no month_grid; day cells dispatch the views action.
+    (let* ((node (glasspane-views--calendar-node items))
+           (json (json-serialize (jetpacs-tests--canon node)
+                                 :null-object :null :false-object :false)))
+      (should-not (jetpacs-lint-spec node))
+      (should-not (string-search "month_grid" json))
+      (should (string-search "views.cal.select-date" json))
+      (should (string-search "Unscheduled (1)" json)))))
+
+(ert-deftest glasspane-views-cal-action-validation ()
+  "The calendar actions validate their inputs and write the state keys."
+  (let ((jetpacs--ui-state (make-hash-table :test 'equal)))
+    (cl-letf (((symbol-function 'jetpacs-shell-push)
+               (cl-function (lambda (&optional _tab &key _switch-to)))))
+      (jetpacs--on-action '((action . "views.cal.select-date")
+                         (args . ((value . "2026-07-10")))) nil)
+      (should (equal "2026-07-10" (jetpacs-ui-state "views-cal-selected")))
+      (jetpacs--on-action '((action . "views.cal.select-date")
+                         (args . ((value . "bogus")))) nil)
+      (should (equal "2026-07-10" (jetpacs-ui-state "views-cal-selected")))
+      (jetpacs--on-action '((action . "views.cal.set-month")
+                         (args . ((value . "2026-08")))) nil)
+      (should (equal "2026-08-01" (jetpacs-ui-state "views-cal-anchor")))
+      (jetpacs--on-action '((action . "views.cal.set-month")
+                         (args . ((value . "nope")))) nil)
+      (should (equal "2026-08-01" (jetpacs-ui-state "views-cal-anchor"))))))
 
 (ert-deftest glasspane-views-swipe-actions ()
   "Open cards swipe to complete (start) and schedule-today (end); done
