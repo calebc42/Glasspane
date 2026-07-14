@@ -479,3 +479,36 @@ rows above.
 - [ ] **Version gate:** bump the document's `#+JETPACS_PACK: glasspane`
       minimum above the installed pack_version, redeploy → views degrade
       with the "needs pack ≥ …" caption.
+
+## 21. Saved-views rich upgrades (cards, swipe/drag, month grid, pager — 2026-07-14, fresh bundle, core pin 6cf8fa9 / api 1.11.0)
+
+Batch-side acceptance is green (103 ERT, including 1.11 node-schema
+lint on every new tree). These rows are the on-device half, against a
+vault with at least one saved view whose query spans TODO states,
+priorities, tags, and scheduled dates.
+
+- [ ] **Rich cards:** board/calendar cards show the colored priority
+      badge, strike-through on done headings, the todo · file caption,
+      the compact scheduled/deadline row, and tappable tag chips
+      (tap → the Search view filtered to that tag). The list
+      rendering's Heading/State/Tags cells carry the same spans.
+- [ ] **Swipe gestures:** swiping a card from the start completes the
+      todo (default done keyword; done cards don't offer it); from the
+      end schedules it today. Both queue offline; the re-push shows
+      the new state.
+- [ ] **Drag reorder (single-file views only):** a view whose results
+      all live in one file shows the swap_vert toggle; toggled on, the
+      list becomes a drag list; a drag moves the subtree on disk and
+      the repush lands back on the views screen (not the file editor).
+      A view spanning files never shows the toggle.
+- [ ] **Month-grid calendar:** the calendar rendering opens on the
+      current month with dot marks on days holding items; tapping a
+      day shows its bucket below; companion-local month swipe
+      re-anchors and pushes fresh marks; the Unscheduled section
+      renders under the day bucket. A pre-month_grid companion gets
+      the composed fallback grid and day taps still select.
+- [ ] **Rendering pager:** List | Board | Calendar are swipeable tabs;
+      the settled page persists as the view's rendering (survives
+      restart); opening a different saved view resets the pager to
+      that view's rendering. A pre-tabs companion keeps the chip
+      switcher.

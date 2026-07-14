@@ -11,7 +11,7 @@ action catalog + `glasspane-pack.el` + dependency-aware `glasspane-pack.json`
 [DECISION-no-binding-template-dsl.md](DECISION-no-binding-template-dsl.md):
 rich rendering stays in elisp `:builder`s; `:spec` is the composer-facing
 grammar, not a Tier-1 replication target. Task 21 and the submodule bump
-landed too (`edf5eb7`, `edeba78`; the pin has since moved to api 1.6.0).
+landed too (`edf5eb7`, `edeba78`; the pin has since moved to api 1.11.0).
 **org-adoption remains pending** —
 [PLAN-glasspane-org-adoption.md](PLAN-glasspane-org-adoption.md) is the
 executable plan. Everything below is the original handoff, kept as the

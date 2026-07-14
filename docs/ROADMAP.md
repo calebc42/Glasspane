@@ -35,10 +35,19 @@ vulpea-backed `glasspane.notes`), an annotated action catalog, and
 
 The **org-adoption** landed too: `glasspane-org.el` stands on the
 core's `jetpacs-org-*` primitives (one query grammar, canonical
-refs/cache, the guarded vulpea note path — api 1.6.0), keeping only
-Glasspane's extractions and its mutation-funnel policy
+refs/cache, the guarded vulpea note path — adopted at api 1.6.0),
+keeping only Glasspane's extractions and its mutation-funnel policy
 ([PLAN-glasspane-org-adoption.md](PLAN-glasspane-org-adoption.md) has
 the record, including the deliberate keep-the-funnel decision).
+
+The **jetpacs pin now rides `6cf8fa9` (api 1.11.0, SPEC-1.0-rc)** — a
+purely additive bump (hypertext/sections/hosts substrates, the schema
+registry's stricter lint). On that base the **saved views went rich**
+(all `:builder`, per the standing no-template-DSL decision): span
+styling with priority badges and strike-through, tappable tag chips,
+swipe complete/schedule-today, single-file drag reorder, a month-grid
+calendar, and a list|board|calendar tabs pager — each with the
+composed fallback for companions predating the node.
 
 What that leaves is **debt, not features**:
 
