@@ -142,6 +142,7 @@ Returns a list of alists representing agenda items.  Memoised; see
       (tags . ,(vconcat (vulpea-note-tags note)))
       (scheduled . ,(vulpea-note-scheduled note))
       (deadline  . ,(vulpea-note-deadline note))
+      (level . ,(vulpea-note-level note))
       (file . ,path)
       (pos . ,pos)
       (ref . ,(delq nil
@@ -185,6 +186,7 @@ Memoised; see `jetpacs-org-cache-invalidate'."
                    (tags . ,(vconcat tags))
                    (scheduled . ,scheduled)
                    (deadline  . ,deadline)
+                   (level . ,(nth 0 components))
                    (file . ,(buffer-file-name))
                    (pos . ,(point))
                    (ref . ,(jetpacs-org-heading-ref)))
@@ -209,6 +211,7 @@ tags/file/pos/ref); used by the search layer."
       (tags . ,(vconcat tags))
       (scheduled . ,scheduled)
       (deadline  . ,deadline)
+      (level . ,(nth 0 components))
       (file . ,(buffer-file-name))
       (pos . ,(point))
       (ref . ,(jetpacs-org-heading-ref)))))

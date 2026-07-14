@@ -1041,7 +1041,9 @@ container would break Compose) and wrap otherwise."
                ;; Paste at the new level (or original level if nil)
                (org-paste-subtree (or new-level from-level)))))
           (glasspane-org--save-and-invalidate (find-file-noselect file))
-          (jetpacs-shell-push nil :switch-to "edit"))))))
+          ;; Views-originated drags pass `view' to land back where the
+          ;; drag happened; legacy templates (no arg) keep the editor.
+          (jetpacs-shell-push nil :switch-to (or (alist-get 'view args) "edit")))))))
 
 (defun glasspane-ui--org-editor-actions (file)
   "Reader/refile toggles and the properties dialog for org FILE."

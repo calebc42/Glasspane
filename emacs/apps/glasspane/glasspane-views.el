@@ -9,8 +9,10 @@
 ;; Everything rides existing machinery: `glasspane-org--query' (memoised,
 ;; org-ql-or-fallback), the §9 table node, `heading.tap' for drill-in,
 ;; and `heading.todo-set' for moving a board card between columns (a
-;; menu on the card — plain columns don't drag; a drag wire node is a
-;; later decision, noted in the plan).
+;; menu on the card — board columns still don't drag; no drag-between-
+;; columns wire node exists).  Cards swipe to complete/schedule-today,
+;; and a single-file view's list rendering can toggle into a
+;; `jetpacs-reorderable-list' riding `heading.reorder'.
 
 ;;; Code:
 
@@ -132,11 +134,18 @@ One span list feeds both table cells and `jetpacs-rich-text' cards."
                   "  ·  ")))
     (unless (string-empty-p caption) caption)))
 
+(defun glasspane-views--done-keyword ()
+  "The keyword a swipe-to-complete lands on."
+  (or (car (default-value 'org-done-keywords)) "DONE"))
+
 (defun glasspane-views--card (item &optional trailing)
   "The shared rich card for ITEM; TRAILING sits at the row's end.
 Priority-badged headline (struck through when done), todo · file
-caption, compact scheduled/deadline row, tappable tag chips."
-  (let ((middle
+caption, compact scheduled/deadline row, tappable tag chips.  Swipe
+from the start completes an open todo; swipe from the end schedules
+it today — both remain reachable by tap → detail on old companions."
+  (let ((ref (alist-get 'ref item))
+        (middle
          (apply #'jetpacs-column
                 (delq nil
                       (list
@@ -149,7 +158,56 @@ caption, compact scheduled/deadline row, tappable tag chips."
      (list (apply #'jetpacs-row
                   (delq nil (list (jetpacs-box (list middle) :weight 1)
                                   trailing))))
-     :on-tap (glasspane-views--tap item))))
+     :on-tap (glasspane-views--tap item)
+     :swipe-start
+     (unless (glasspane-views--done-p item)
+       (jetpacs-swipe-action
+        "check" "Done"
+        (jetpacs-action "heading.todo-set"
+                     :args (append ref
+                                   `((state . ,(glasspane-views--done-keyword))))
+                     :when-offline "queue")
+        :color "#2E7D32"))
+     :swipe-end
+     (jetpacs-swipe-action
+      "today" "Today"
+      (jetpacs-action "heading.schedule"
+                   :args (append ref '((when . "+0d")))
+                   :when-offline "queue")))))
+
+(defvar glasspane-views--reorder nil
+  "Non-nil while the open view's list rendering shows the drag list.
+Reset when a view opens or closes.")
+
+(defun glasspane-views--single-file (items)
+  "The one file every item of ITEMS lives in, or nil when they span files.
+Drag reorder needs one buffer: `heading.reorder' cuts and pastes a
+subtree within a single file, so a query whose results span files (or
+include file-level notes, level 0) cannot reorder."
+  (let ((file (and items (alist-get 'file (car items)))))
+    (when (and (stringp file)
+               (cl-every (lambda (it)
+                           (and (equal (alist-get 'file it) file)
+                                (integerp (alist-get 'pos it))
+                                (integerp (alist-get 'level it))
+                                (>= (alist-get 'level it) 1)))
+                         items))
+      file)))
+
+(defun glasspane-views--reorder-node (items file)
+  "The drag-reorder list for a single-FILE view's ITEMS.
+Rides the existing `heading.reorder' action; `view' routes the repush
+back here instead of the file editor."
+  (jetpacs-reorderable-list
+   (mapcar (lambda (it)
+             `((label . ,(or (alist-get 'headline it) ""))
+               (level . ,(alist-get 'level it))
+               (pos   . ,(alist-get 'pos it))
+               (file  . ,file)))
+           items)
+   :on-reorder (jetpacs-action "heading.reorder"
+                            :args `((file . ,file)
+                                    (view . "glasspane.views")))))
 
 (defun glasspane-views--table-node (items)
   "The list rendering: one table row per item, tappable cells."
@@ -276,12 +334,27 @@ vanish from the board."
   (let* ((items (condition-case err
                     (glasspane-views--items view)
                   (user-error (list 'error (error-message-string err)))))
-         (broken (eq (car-safe items) 'error)))
+         (broken (eq (car-safe items) 'error))
+         (rendering (or (alist-get 'rendering view) "list"))
+         (file (and (not broken) (glasspane-views--single-file items))))
     (jetpacs-shell-nav-view
      (alist-get 'name view)
      (apply #'jetpacs-lazy-column
             (append
-             (list (glasspane-views--rendering-chips view)
+             (list (apply #'jetpacs-row
+                          (delq nil
+                                (list
+                                 (jetpacs-box
+                                  (list (glasspane-views--rendering-chips view))
+                                  :weight 1)
+                                 ;; Drag reorder only makes sense on one
+                                 ;; file's list — see --single-file.
+                                 (when (and file (equal rendering "list"))
+                                   (jetpacs-icon-button
+                                    "swap_vert"
+                                    (jetpacs-action "views.reorder"
+                                                 :when-offline "drop")
+                                    :content-description "Toggle drag reorder")))))
                    (jetpacs-spacer :height 4))
              (cond
               (broken
@@ -292,10 +365,12 @@ vanish from the board."
                                        :title "No matches"
                                        :caption (format "%s"
                                                         (alist-get 'query view)))))
-              (t (pcase (alist-get 'rendering view)
+              (t (pcase rendering
                    ("board" (list (glasspane-views--board-node items)))
                    ("calendar" (glasspane-views--calendar-nodes items))
-                   (_ (list (glasspane-views--table-node items))))))))
+                   (_ (if (and glasspane-views--reorder file)
+                          (list (glasspane-views--reorder-node items file))
+                        (list (glasspane-views--table-node items)))))))))
      :nav-action (jetpacs-action "views.back" :when-offline "drop")
      :snackbar snackbar)))
 
@@ -380,15 +455,22 @@ Field ids come from the `jetpacs-form' registry; views.save reads them."
     (lambda (args _)
       (let ((name (alist-get 'name args)))
         (when (glasspane-views--get name)
-          (setq glasspane-views--current name)
+          (setq glasspane-views--current name
+                glasspane-views--reorder nil)
           (jetpacs-shell-push nil :switch-to "glasspane.views"))))
     :doc "Open a saved view by name."
     :args '((:name name :type "text" :required t)))
 
   (jetpacs-defaction "views.back"
     (lambda (_args _)
-      (setq glasspane-views--current nil)
+      (setq glasspane-views--current nil
+            glasspane-views--reorder nil)
       (jetpacs-shell-push nil :switch-to "glasspane.views")))
+
+  (jetpacs-defaction "views.reorder"
+    (lambda (_args _)
+      (setq glasspane-views--reorder (not glasspane-views--reorder))
+      (jetpacs-shell-push)))
 
   (jetpacs-defaction "views.rendering"
     (lambda (args _)

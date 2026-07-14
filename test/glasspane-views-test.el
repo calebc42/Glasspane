@@ -50,6 +50,78 @@ lints clean under the 1.11 node schema."
                                   :null-object :null :false-object :false)))
         (should (string-search "a.org" json))))))   ; caption file basename
 
+(ert-deftest glasspane-views-swipe-actions ()
+  "Open cards swipe to complete (start) and schedule-today (end); done
+cards keep only the schedule swipe."
+  (let* ((items (jetpacs-tests--views-items))
+         (open-json (json-serialize (jetpacs-tests--canon
+                                     (glasspane-views--card (car items)))
+                                    :null-object :null :false-object :false))
+         (done-json (json-serialize (jetpacs-tests--canon
+                                     (glasspane-views--card (nth 2 items)))
+                                    :null-object :null :false-object :false)))
+    (should (string-search "swipe_start" open-json))
+    (should (string-search "heading.todo-set" open-json))
+    (should (string-search "swipe_end" open-json))
+    (should (string-search "heading.schedule" open-json))
+    (should (string-search "+0d" open-json))
+    (should-not (string-search "swipe_start" done-json))
+    (should (string-search "swipe_end" done-json))))
+
+(ert-deftest glasspane-views-reorder-single-file-gate ()
+  "Drag reorder exists only for single-file result sets; the node rides
+heading.reorder with the view routing arg and lints."
+  (let ((single '(((headline . "One") (level . 1) (pos . 1) (file . "/tmp/a.org")
+                   (ref . ((file . "/tmp/a.org") (pos . 1))))
+                  ((headline . "Two") (level . 2) (pos . 40) (file . "/tmp/a.org")
+                   (ref . ((file . "/tmp/a.org") (pos . 40))))))
+        (mixed '(((headline . "One") (level . 1) (pos . 1) (file . "/tmp/a.org"))
+                 ((headline . "Two") (level . 1) (pos . 1) (file . "/tmp/b.org")))))
+    (should (equal (glasspane-views--single-file single) "/tmp/a.org"))
+    (should-not (glasspane-views--single-file mixed))
+    ;; File-level notes (level 0) can't reorder.
+    (should-not (glasspane-views--single-file
+                 '(((headline . "Note") (level . 0) (pos . 1)
+                    (file . "/tmp/a.org")))))
+    (let* ((node (glasspane-views--reorder-node single "/tmp/a.org"))
+           (json (json-serialize (jetpacs-tests--canon node)
+                                 :null-object :null :false-object :false)))
+      (should-not (jetpacs-lint-spec node))
+      (should (string-search "heading.reorder" json))
+      (should (string-search "glasspane.views" json))
+      (should (string-search "Two" json)))))
+
+(ert-deftest glasspane-views-reorder-toggle-in-open-view ()
+  "The swap_vert toggle appears only for a single-file list view; when
+toggled on, the list body becomes the drag list."
+  (let ((view '((name . "V") (query . "todo:TODO") (rendering . "list")))
+        (single '(((headline . "One") (todo . "TODO") (level . 1) (pos . 1)
+                   (file . "/tmp/a.org")
+                   (ref . ((file . "/tmp/a.org") (pos . 1)))))))
+    (cl-letf (((symbol-function 'glasspane-views--items)
+               (lambda (_view) single)))
+      (let ((glasspane-views--reorder nil))
+        (should (string-search
+                 "views.reorder"
+                 (json-serialize (jetpacs-tests--canon
+                                  (glasspane-views--open-view view nil))
+                                 :null-object :null :false-object :false))))
+      (let ((glasspane-views--reorder t))
+        (should (string-search
+                 "heading.reorder"
+                 (json-serialize (jetpacs-tests--canon
+                                  (glasspane-views--open-view view nil))
+                                 :null-object :null :false-object :false)))))
+    ;; Result sets spanning files never offer the toggle.
+    (cl-letf (((symbol-function 'glasspane-views--items)
+               (lambda (_view) (jetpacs-tests--views-items))))
+      (let ((glasspane-views--reorder nil))
+        (should-not (string-search
+                     "views.reorder"
+                     (json-serialize (jetpacs-tests--canon
+                                      (glasspane-views--open-view view nil))
+                                     :null-object :null :false-object :false)))))))
+
 (ert-deftest glasspane-views-board-includes-file-local-keywords ()
   "A TODO state the global keyword list doesn't know still gets a
 column — cards with file-local #+TODO: keywords must not silently
