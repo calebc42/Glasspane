@@ -240,11 +240,18 @@ Returns a list of alists representing agenda items.  Memoised; see
                           (when pos `(pos . ,pos))
                           (when title `(headline . ,title))))))))
 
+(defun glasspane-org--vulpea-p ()
+  "Non-nil when the user has already loaded vulpea.
+App policy: never force-load — `jetpacs-org-vulpea-available-p' would
+`require' vulpea; Glasspane only rides an index the user's own config
+brought up."
+  (and (featurep 'vulpea) (fboundp 'vulpea-db-query)))
+
 (defun glasspane-org--todo-items (&optional files)
   "Extract TODO items from FILES (or agenda files).
 Memoised; see `jetpacs-org-cache-invalidate'."
   (jetpacs-org-with-cache 'glasspane (list 'todos files)
-    (if (and (featurep 'vulpea) (fboundp 'vulpea-db-query) (null files))
+    (if (and (glasspane-org--vulpea-p) (null files))
         (mapcar #'glasspane-org--vulpea-note-to-item
                 (vulpea-db-query (lambda (note) (vulpea-note-todo note))))
       (glasspane-org--todo-items-1 files))))
@@ -339,20 +346,25 @@ suitable for `glasspane-ui--agenda-card'."
 (defun glasspane-org--vulpea-query (tree)
   "Run parsed query sexp TREE over the whole Vulpea database.
 Matching runs entirely off the index via the canonical
-`jetpacs-org-note-matches-p'; a term outside
-`jetpacs-org-note-query-terms' signals `user-error'."
+`jetpacs-org-note-matches-p'.  Callers route TREE here only when
+`jetpacs-org-note-query-supported-p' approves it; an unsupported term
+slipping through signals `user-error'."
   (let ((notes (vulpea-db-query (lambda (note) (jetpacs-org-note-matches-p tree note)))))
     (mapcar #'glasspane-org--vulpea-note-to-item notes)))
 
 (defun glasspane-org--query (tree)
   "Run parsed query sexp TREE over the org data; heading items.
-The engine behind search and every saved/derived view.  Vulpea's note
-index answers when the app has it loaded (Glasspane's indexed-query
-policy); otherwise `jetpacs-org-query' dispatches org-ql → the built-in
-interpreter over the agenda files.  Signals `user-error' on unsupported
-terms.  Memoised; see `jetpacs-org-cache-invalidate'."
+The engine behind search and every saved/derived view.  Scope rule:
+when the user has vulpea loaded and TREE stays inside
+`jetpacs-org-note-query-terms', the note index answers from the WHOLE
+vault (no file visit); terms the index can't evaluate (ts, closed,
+clocked, path, ...) route to `jetpacs-org-query' — org-ql or the
+built-in interpreter — over `org-agenda-files' only.  Signals
+`user-error' on terms neither engine knows.  Memoised; see
+`jetpacs-org-cache-invalidate'."
   (when tree
-    (if (and (featurep 'vulpea) (fboundp 'vulpea-db-query))
+    (if (and (glasspane-org--vulpea-p)
+             (jetpacs-org-note-query-supported-p tree))
         ;; `jetpacs-org-query' caches internally; only the vulpea arm
         ;; needs its own memo.
         (jetpacs-org-with-cache 'glasspane (list 'query (format "%S" tree))
@@ -360,11 +372,12 @@ terms.  Memoised; see `jetpacs-org-cache-invalidate'."
       (jetpacs-org-query 'glasspane tree #'glasspane-org--heading-item-at))))
 
 (defun glasspane-org--search (query)
-  "Search agenda files for QUERY; return a list of heading items.
+  "Search the org data for QUERY; return a list of heading items.
 QUERY may be an org-ql sexp, filter tokens, or free text — see
-`jetpacs-org-parse-query'.  Signals `user-error' on queries that
-don't parse or use unsupported terms, so callers can surface the
-problem."
+`jetpacs-org-parse-query'.  Scope follows `glasspane-org--query':
+whole vault off the note index when vulpea has it, agenda files
+otherwise.  Signals `user-error' on queries that don't parse or use
+terms no engine supports, so callers can surface the problem."
   (glasspane-org--query (jetpacs-org-parse-query query)))
 
 (defun glasspane-org--filter-items (items query)

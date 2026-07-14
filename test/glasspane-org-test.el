@@ -265,4 +265,28 @@ vocabulary `jetpacs-lint' checks."
                              (append (alist-get 'menu item) nil)))
                items)))))
 
+;; ─── Query routing (vulpea index vs org-ql) ─────────────────────────────────
+
+(ert-deftest glasspane-org-query-routes-supported-to-index ()
+  "An index-evaluable tree answers off the vulpea note index."
+  (cl-letf (((symbol-function 'glasspane-org--vulpea-p) (lambda () t))
+            ((symbol-function 'glasspane-org--vulpea-query)
+             (lambda (tree) (list `((routed . index) (tree . ,tree))))))
+    (jetpacs-org-cache-invalidate 'glasspane)
+    (let ((items (glasspane-org--query '(todo "TODO"))))
+      (should (equal (alist-get 'routed (car items)) 'index)))))
+
+(ert-deftest glasspane-org-query-routes-unsupported-to-org-ql ()
+  "A tree outside `jetpacs-org-note-query-terms' bypasses the index and
+runs through `jetpacs-org-query' (org-ql / built-in, agenda scope) —
+the 1.6.0 routing rule, instead of the old user-error."
+  (let (called)
+    (cl-letf (((symbol-function 'glasspane-org--vulpea-p) (lambda () t))
+              ((symbol-function 'glasspane-org--vulpea-query)
+               (lambda (_tree) (error "index arm must not run")))
+              ((symbol-function 'jetpacs-org-query)
+               (lambda (_ns tree _action) (setq called tree) nil)))
+      (glasspane-org--query '(ts :from -7))
+      (should (equal called '(ts :from -7))))))
+
 (provide 'glasspane-org-test)
