@@ -5,17 +5,18 @@
 # (or WSL) where emacs is on PATH directly — no WSL path translation.
 #
 # Default: rebuild glasspane.el from emacs/apps/glasspane/*.el via Emacs,
-# then adb-push it to /sdcard/Download/glasspane.el. Termux is not
+# then adb-push it to /sdcard/Documents/jetpacs/glasspane.el. Termux is not
 # debuggable, so adb cannot write into /data/data/com.termux directly — the
 # Glasspane starter init (docs/starter-init.el) adopts a newer staged
-# bundle from /sdcard/Download (or /sdcard/Documents) on Emacs startup.
+# bundle from /sdcard/Documents/jetpacs (or the legacy /sdcard/Documents
+# and /sdcard/Download slots) on Emacs startup.
 #
 # The bundle `require`s jetpacs-core — pass --core to also deploy the
 # vendored jetpacs/jetpacs-core.el alongside it (first deploy, or after a
 # jetpacs update).
 #
 # Usage:
-#   ./deploy.sh                 # rebuild + stage to /sdcard/Download
+#   ./deploy.sh                 # rebuild + stage to /sdcard/Documents/jetpacs
 #   ./deploy.sh --core          # also stage jetpacs-core.el
 #   ./deploy.sh --ssh           # rebuild + scp straight into Termux's ~/.emacs.d/elisp
 #   ./deploy.sh --apk           # also build + install the companion APK
@@ -65,10 +66,12 @@ if [ "$use_ssh" -eq 1 ]; then
   fi
   echo '   Installed to ~/.emacs.d/elisp/ - reload or restart Emacs.'
 else
-  echo '-- Staging to /sdcard/Download (adopted by the starter init on Emacs restart) ...'
-  "$adb" push "$bundle" /sdcard/Download/glasspane.el
+  stage=/sdcard/Documents/jetpacs
+  echo "-- Staging to $stage (adopted by the starter init on Emacs restart) ..."
+  "$adb" shell mkdir -p "$stage"
+  "$adb" push "$bundle" "$stage/glasspane.el"
   if [ "$use_core" -eq 1 ]; then
-    "$adb" push "$core" /sdcard/Download/jetpacs-core.el
+    "$adb" push "$core" "$stage/jetpacs-core.el"
   fi
   echo '   Staged. Restart Emacs on the device (or eval the adopt snippet) to pick it up.'
 fi

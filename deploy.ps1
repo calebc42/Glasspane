@@ -5,18 +5,19 @@ connected Android device.
 
 .DESCRIPTION
 Default: rebuild glasspane.el from emacs/apps/glasspane/*.el via WSL
-Emacs, then adb-push it to /sdcard/Download/glasspane.el. Termux is not
-debuggable, so adb cannot write into /data/data/com.termux directly —
-pair this with the Glasspane starter init (docs/starter-init.el), which
-adopts a newer staged bundle at Emacs startup:
+Emacs, then adb-push it to /sdcard/Documents/jetpacs/glasspane.el.
+Termux is not debuggable, so adb cannot write into /data/data/com.termux
+directly — pair this with the Glasspane starter init
+(docs/starter-init.el), which adopts a newer staged bundle at Emacs
+startup:
 
     ;; Adopt a freshly adb-pushed bundle before loading it.
-    (let ((staged "/sdcard/Download/glasspane.el")
+    (let ((staged "/sdcard/Documents/jetpacs/glasspane.el")
           (installed "~/.emacs.d/elisp/glasspane.el"))
       (when (and (file-readable-p staged)
                  (file-newer-than-file-p staged installed))
         (copy-file staged installed t)
-        (message "glasspane: adopted new bundle from Downloads")))
+        (message "glasspane: adopted new staged bundle")))
     (require 'glasspane)
 
 Works whether the repo lives on a Windows drive (C:\...) or inside WSL
@@ -81,11 +82,14 @@ if ($Ssh) {
     }
     Write-Host '   Installed to ~/.emacs.d/elisp/ - reload or restart Emacs.'
 } else {
-    Write-Host '-- Staging to /sdcard/Download (adopted by the starter init on Emacs restart) ...'
-    adb push $bundle /sdcard/Download/glasspane.el
+    $stage = '/sdcard/Documents/jetpacs'
+    Write-Host "-- Staging to $stage (adopted by the starter init on Emacs restart) ..."
+    adb shell mkdir -p $stage
+    if ($LASTEXITCODE -ne 0) { throw 'adb mkdir failed.' }
+    adb push $bundle "$stage/glasspane.el"
     if ($LASTEXITCODE -ne 0) { throw 'adb push failed.' }
     if ($Core) {
-        adb push $coreFile /sdcard/Download/jetpacs-core.el
+        adb push $coreFile "$stage/jetpacs-core.el"
         if ($LASTEXITCODE -ne 0) { throw 'adb push (jetpacs-core) failed.' }
     }
     Write-Host '   Staged. Restart Emacs on the device (or eval the adopt snippet) to pick it up.'

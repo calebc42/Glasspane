@@ -23,15 +23,16 @@
 ;; core rather than inlining it, so both must be present).  Newer staged
 ;; copies are adopted automatically at startup: the companion app's
 ;; onboarding writes them to /sdcard/Documents, and the deploy scripts
-;; (a dev machine) stage to /sdcard/Download.  Both slots are checked
-;; and the most-recent copy wins, so either delivery path just works —
-;; and any other Tier-1 bundle you add to the list is adopted the same
-;; way.
+;; (a dev machine) stage to /sdcard/Documents/jetpacs.  Every slot is
+;; checked (/sdcard/Download is the legacy deploy target) and the
+;; most-recent copy wins, so either delivery path just works — and any
+;; other Tier-1 bundle you add to the list is adopted the same way.
 (add-to-list 'load-path (expand-file-name "elisp" user-emacs-directory))
 (dolist (bundle '("jetpacs-core.el" "glasspane.el"))
   (let ((staged (seq-filter #'file-readable-p
                             (list (concat "/sdcard/Documents/" bundle)
-                                  (concat "/sdcard/Download/" bundle))))
+                                  (concat "/sdcard/Download/" bundle)
+                                  (concat "/sdcard/Documents/jetpacs/" bundle))))
         (installed (expand-file-name (concat "elisp/" bundle)
                                      user-emacs-directory)))
     (dolist (s staged)
