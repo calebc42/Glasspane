@@ -411,3 +411,36 @@ mixed with a new one recreates the very collisions this fixes.  Re-stage
 - [ ] **Live uninstall:** `(jetpacs-app-unregister "orgzly")` from Eval →
       its launcher card, tabs, drawer band, and settings sections all
       disappear; Glasspane unaffected.
+
+## 18. Build-feature probe (hardening Task 23 — 2026-07-13, core bundle ≥1.7.0)
+
+The APK's optional-build matrix becomes positive knowledge. The recorded
+answers below unblock two queued decisions: the SQLite-backed org index /
+FTS grep direction, and Task 22's native-comp rung.
+
+- [ ] **Bridge doctor row:** drawer → Settings → Bridge shows "Emacs
+      build features" with the check/dash matrix
+      (sqlite / treesit / native-comp / libxml).
+- [ ] **hello carries it:** the companion log's `session.hello` shows
+      `features: [...]` matching the row.
+- [ ] **Record the actual APK matrix here** (edit this file):
+      sqlite=?, treesit=?, native-comp=?, libxml=?
+
+## 19. Byte-compiled bundles (hardening Task 22 — 2026-07-13, core bundle ≥1.7.0)
+
+- [ ] **First boot after adopt compiles:** *Messages* shows
+      "Jetpacs: byte-compiling jetpacs-core.el..." (and one line per app
+      bundle); `~/.emacs.d/jetpacs/lib/` now holds a `.elc` beside each
+      bundle's `.el`.
+- [ ] **Second boot loads bytecode:** `M-:`
+      `(cl-some (lambda (e) (and (stringp (car e)) (string-suffix-p "jetpacs-core.elc" (car e)) (car e))) load-history)`
+      returns the lib/ `.elc` path (not the `.el`).
+- [ ] **Cold-boot delta recorded** (edit this file): boot-to-connect,
+      source vs `.elc` = ?
+- [ ] **Fresh sync recompiles, never staleness:** stage a newer
+      `jetpacs-core.el`, restart → adopt + recompile messages appear once,
+      and the new bundle's behavior is live (`load-prefer-newer` backstop:
+      at no point does the old `.elc` win).
+- [ ] **Broken bundle never bricks boot:** stage a deliberately truncated
+      app bundle, restart → a warning names the bundle, its stale `.elc`
+      is gone, Emacs boots and the bridge connects.
