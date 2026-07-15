@@ -32,6 +32,12 @@
 
 (declare-function vulpea-db-autosync-mode "vulpea-db" (&optional arg))
 (declare-function vulpea-db-sync-full-scan "vulpea-db" ())
+(declare-function org-srs-item-confirm-command "org-srs" ())
+
+;; Forward-declared: `org-directory' lives in org, which this file must not
+;; force-load — the references in `--light-up' only run once the optional
+;; engines are present.
+(defvar org-directory)
 
 (defcustom glasspane-packages-auto-install t
   "When non-nil, a device install with missing engines schedules one
