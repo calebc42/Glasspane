@@ -49,6 +49,7 @@
                     "apps/glasspane/glasspane-srs.el"
                     "apps/glasspane/glasspane-demo.el"
                     "apps/glasspane/glasspane-gallery.el"
+                    "apps/glasspane/glasspane-ef.el"
                     "apps/glasspane/glasspane-config.el"
                     "apps/glasspane/glasspane-packages.el"
                     "apps/glasspane/glasspane-pack.el"

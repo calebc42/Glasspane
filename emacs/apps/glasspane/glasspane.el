@@ -25,6 +25,7 @@
 (require 'glasspane-notes)
 (require 'glasspane-srs)
 (require 'glasspane-gallery)
+(require 'glasspane-ef)
 (require 'glasspane-config)
 (require 'glasspane-packages)
 (require 'glasspane-pack)

@@ -14,6 +14,7 @@ EMACS="${EMACS:-emacs}"
   -l glasspane-config-test \
   -l glasspane-core-test \
   -l glasspane-demo-test \
+  -l glasspane-ef-test \
   -l glasspane-gallery-test \
   -l glasspane-jetpacs-test \
   -l glasspane-journal-test \
