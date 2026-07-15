@@ -33,14 +33,12 @@ placeholder view; both must serialize."
                                        :false-object :false)))
       (should (string-search "isn't installed" (prin1-to-string view))))))
 
-(ert-deftest glasspane-ef-drawer-item-registered ()
-  "The screen is reachable from the drawer, owner-scoped to Glasspane."
-  (let ((items (delq nil (mapcar (lambda (e) (funcall (cadr e)))
-                                 jetpacs-shell-drawer-items))))
-    (should (cl-some (lambda (item)
-                       (equal (alist-get 'label item) "Ef Themes"))
-                     items))
-    (should (string-search "ef.show" (prin1-to-string items)))))
+(ert-deftest glasspane-ef-settings-link-registered ()
+  "The screen is reachable from a card in the Emacs settings screen (beside
+the core Modus Themes link), owner-scoped to Glasspane."
+  (let ((body (prin1-to-string (jetpacs-settings-sections))))
+    (should (string-search "Ef Themes" body))
+    (should (string-search "ef.show" body))))
 
 (ert-deftest glasspane-ef-queries ()
   "The theme queries read ef-themes through its API: current theme, the theme

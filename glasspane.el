@@ -8409,9 +8409,10 @@ The newest of the demo commands (see also `glasspane-demo-setup')."
 ;; package rather than inside Emacs, so this lives in the app tier (an
 ;; opinion Glasspane offers) rather than the core.
 ;;
-;; Reached from the drawer ("Ef Themes") or `M-x glasspane-ef-open', it is a
-;; back-arrow overlay that only builds while open (the picker lists ~40
-;; themes, so we don't pay for it on every background push).  It offers:
+;; Reached from Emacs Settings — a link right after the core "Modus Themes"
+;; one, so the two theme pickers sit together — or `M-x glasspane-ef-open'.
+;; It is a back-arrow overlay that only builds while open (the picker lists
+;; ~40 themes, so we don't pay for it on every background push).  It offers:
 ;;
 ;;  - a light/dark grouped picker, each row previewing a theme's background
 ;;    and identity accent as swatches; the active theme is marked, a tap
@@ -8752,9 +8753,21 @@ The reload also drives `enable-theme-functions', re-pushing the mirror when
     :overlay (lambda () glasspane-ef--open)
     :order 122)
 
-  (jetpacs-shell-add-drawer-item
-   66 (lambda () (jetpacs-drawer-item "palette" "Ef Themes"
-                                   (jetpacs-action "ef.show")))))
+  ;; Entry point: a card in the Emacs settings screen, right after the core
+  ;; "Modus Themes" link (order 25), so the two theme pickers sit together —
+  ;; satellite screens live in Settings, not the drawer (the drawer-UX rule).
+  (jetpacs-settings-add-link
+   26 (lambda ()
+        (jetpacs-card
+         (list (jetpacs-row
+                (jetpacs-icon "colorize")
+                (jetpacs-box (list (jetpacs-column
+                                    (jetpacs-text "Ef Themes" 'label)
+                                    (jetpacs-text "Pick, preview, and tune the colorful ef-themes"
+                                                  'caption)))
+                             :weight 1)
+                (jetpacs-icon "chevron_right")))
+         :on-tap (jetpacs-action "ef.show" :when-offline "drop")))))
 
 ;; Landing on any real view closes the overlay (mirrors the gallery).
 (add-hook 'jetpacs-shell-view-switched-hook
