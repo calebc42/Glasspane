@@ -96,10 +96,13 @@ success, and never signals on failure."
   "vulpea is only wanted on an Emacs built with SQLite; the other
 engines are wanted regardless."
   (cl-letf (((symbol-function 'sqlite-available-p) (lambda () t)))
-    (should (memq 'vulpea (glasspane-packages--wanted))))
+    (should (memq 'vulpea (glasspane-packages--wanted)))
+    (should (memq 'ef-themes (glasspane-packages--wanted))))
   (cl-letf (((symbol-function 'sqlite-available-p) (lambda () nil)))
     (should-not (memq 'vulpea (glasspane-packages--wanted)))
     (should (memq 'org-ql (glasspane-packages--wanted)))
-    (should (memq 'org-srs (glasspane-packages--wanted)))))
+    (should (memq 'org-srs (glasspane-packages--wanted)))
+    ;; ef-themes needs no SQLite — wanted regardless.
+    (should (memq 'ef-themes (glasspane-packages--wanted)))))
 
 (provide 'glasspane-packages-test)

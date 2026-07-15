@@ -253,14 +253,29 @@ type); the paired `jetpacs-settings-watch-toggle' still applies each."
                   (glasspane-ef--style-section)
                   (list (glasspane-ef--more-link)))))))
 
+(defun glasspane-ef--not-installed ()
+  "Placeholder shown when the ef-themes package is absent.
+On a connected device it auto-installs (with the app's other packages);
+we also offer a one-tap install when that action is available."
+  (apply #'jetpacs-column
+         (delq nil
+               (list (jetpacs-text "ef-themes isn't installed yet." 'title)
+                     (jetpacs-text
+                      "It installs automatically on a connected device; you can also install it now (with the app's other packages)."
+                      'caption)
+                     (when (gethash "packages.install" jetpacs-action-handlers)
+                       (jetpacs-button
+                        "Install"
+                        (jetpacs-action "packages.install" :when-offline "drop")
+                        :icon "download" :variant "tonal"))))))
+
 (defun glasspane-ef--view (snackbar)
   "The overlay view: back returns to wherever the user was."
   (jetpacs-shell-nav-view
    "Ef Themes"
    (if (glasspane-ef--ensure)
        (glasspane-ef--body)
-     (jetpacs-column
-      (jetpacs-text "The ef-themes package is not installed in this Emacs." 'body)))
+     (glasspane-ef--not-installed))
    :snackbar snackbar))
 
 ;; ─── Live re-apply ───────────────────────────────────────────────────────────

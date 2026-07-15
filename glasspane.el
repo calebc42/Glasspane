@@ -8657,14 +8657,29 @@ type); the paired `jetpacs-settings-watch-toggle' still applies each."
                   (glasspane-ef--style-section)
                   (list (glasspane-ef--more-link)))))))
 
+(defun glasspane-ef--not-installed ()
+  "Placeholder shown when the ef-themes package is absent.
+On a connected device it auto-installs (with the app's other packages);
+we also offer a one-tap install when that action is available."
+  (apply #'jetpacs-column
+         (delq nil
+               (list (jetpacs-text "ef-themes isn't installed yet." 'title)
+                     (jetpacs-text
+                      "It installs automatically on a connected device; you can also install it now (with the app's other packages)."
+                      'caption)
+                     (when (gethash "packages.install" jetpacs-action-handlers)
+                       (jetpacs-button
+                        "Install"
+                        (jetpacs-action "packages.install" :when-offline "drop")
+                        :icon "download" :variant "tonal"))))))
+
 (defun glasspane-ef--view (snackbar)
   "The overlay view: back returns to wherever the user was."
   (jetpacs-shell-nav-view
    "Ef Themes"
    (if (glasspane-ef--ensure)
        (glasspane-ef--body)
-     (jetpacs-column
-      (jetpacs-text "The ef-themes package is not installed in this Emacs." 'body)))
+     (glasspane-ef--not-installed))
    :snackbar snackbar))
 
 ;; ─── Live re-apply ───────────────────────────────────────────────────────────
@@ -8924,8 +8939,9 @@ build) — nothing is written until the user opts in explicitly via
 
 ;; org-ql (the full search language), vulpea (backlinks, note
 ;; completion, the stale-file half of Review), org-srs (the Review
-;; screen): all optional, all degrading cleanly — and all installed by
-;; the LEGACY starter init at boot.  Under the foundation flow
+;; screen), ef-themes (the Ef Themes picker — a MELPA package, unlike the
+;; built-in modus themes): all optional, all degrading cleanly — and all
+;; installed by the LEGACY starter init at boot.  Under the foundation flow
 ;; (jetpacs-init + apps.el) nothing installed them, so a fresh device
 ;; dead-ended degraded forever: no Review entry, no backlinks, and
 ;; nothing on the device ever attempted the install — restarting could
@@ -8962,10 +8978,11 @@ never blocked).  The `packages.install' action and
 or from Settings) to manage packages yourself."
   :type 'boolean :group 'jetpacs)
 
-(defconst glasspane-packages--set '(org-ql vulpea org-srs)
+(defconst glasspane-packages--set '(org-ql vulpea org-srs ef-themes)
   "The closed MELPA set the app's optional features read through.
-The starter init's package list, now owned by the bundle.  Deliberately
-not extensible from app data or the wire — see the trust note above.")
+The starter init's package list, now owned by the bundle, plus ef-themes
+for the Ef Themes picker.  Deliberately not extensible from app data or
+the wire — see the trust note above.")
 
 (defvar glasspane-packages--attempted nil
   "Non-nil once this session has scheduled its automatic install attempt.")
@@ -9094,15 +9111,15 @@ wanted is actually missing.  Restart = the natural retry."
     ;; nothing on the wire chooses packages.  package.el is synchronous,
     ;; so feedback rides toasts around the (possibly long) install.
     (lambda (_ _)
-      (jetpacs-send "toast.show" '((text . "Installing org engines…")))
+      (jetpacs-send "toast.show" '((text . "Installing packages…")))
       (if (glasspane-packages-ensure)
-          (jetpacs-send "toast.show" '((text . "Engines ready — views refreshed")))
+          (jetpacs-send "toast.show" '((text . "Packages ready — views refreshed")))
         (jetpacs-send "toast.show" '((text . "Install failed — check *Messages* in Emacs"))))))
 
   (jetpacs-settings-register-section
    "Packages"
    '((glasspane-packages-auto-install
-      :label "Auto-install org engines (org-ql, vulpea, org-srs)"))))
+      :label "Auto-install packages (org-ql, vulpea, org-srs, ef-themes)"))))
 
 (provide 'glasspane-packages)
 ;;; glasspane-packages.el ends here

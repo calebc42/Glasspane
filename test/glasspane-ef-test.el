@@ -31,7 +31,7 @@ placeholder view; both must serialize."
       (should-not (jetpacs-lint-spec view))
       (should (stringp (json-serialize view :null-object :null
                                        :false-object :false)))
-      (should (string-search "not installed" (prin1-to-string view))))))
+      (should (string-search "isn't installed" (prin1-to-string view))))))
 
 (ert-deftest glasspane-ef-drawer-item-registered ()
   "The screen is reachable from the drawer, owner-scoped to Glasspane."
