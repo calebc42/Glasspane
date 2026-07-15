@@ -3,7 +3,10 @@
 ;; GENERATED FILE -- do not edit by hand.
 ;; Produced by emacs/build-bundle.el from the emacs/apps/ sources.
 ;; Concatenated in dependency order; each part keeps its own `provide',
-;; so the inter-file `require' forms resolve within this file.
+;; and the bundle-internal `require' forms are commented out so the
+;; file BYTE-COMPILES standalone: the foundation compiles an adopted
+;; bundle before loading it, when none of these features exist yet —
+;; a surviving hard require is a compile error and a broken .elc.
 ;;
 ;; Requires the Jetpacs core (jetpacs-core.el) on `load-path' first.
 ;;
@@ -726,7 +729,7 @@ ready for the companion's `reminders.set' frame."
 
 (require 'jetpacs-source)
 (require 'jetpacs-surfaces)
-(require 'glasspane-org)
+;; (require 'glasspane-org) — bundle-internal, provided above
 
 (defun glasspane-source--iso-date (ts)
   "The \"YYYY-MM-DD\" date inside org timestamp string TS, or nil.
@@ -1377,7 +1380,7 @@ Returns nil for empty input."
 (require 'org)
 (require 'cl-lib)
 (require 'jetpacs-widgets)
-(require 'glasspane-org-rich)
+;; (require 'glasspane-org-rich) — bundle-internal, provided above
 
 (defcustom glasspane-org-reader-max-headings 400
   "Cap on headings rendered in one reader pass, to bound very large files."
@@ -1777,19 +1780,19 @@ round-trips to Emacs through the ordinary action pipeline."
 
 (require 'jetpacs-apps)
 
-(require 'glasspane-org)
+;; (require 'glasspane-org) — bundle-internal, provided above
 
-(require 'glasspane-clock)
+;; (require 'glasspane-clock) — bundle-internal, provided above
 
-(require 'glasspane-org-toolbar)
+;; (require 'glasspane-org-toolbar) — bundle-internal, provided above
 
-(require 'glasspane-org-reader)
+;; (require 'glasspane-org-reader) — bundle-internal, provided above
 
 (require 'jetpacs-files)
 
 (require 'jetpacs-keymap)
 
-(require 'jetpacs-magit)
+;; (require 'jetpacs-magit) — bundle-internal, provided above
 
 (require 'jetpacs-settings)
 
@@ -2400,7 +2403,7 @@ org buffer without necessarily saving it."
 ;;; glasspane-agenda.el --- Glasspane UI component -*- lexical-binding: t; -*-
 ;;; Code:
 
-(require 'glasspane-ui)
+;; (require 'glasspane-ui) — bundle-internal, provided above
 
 (defvar glasspane-ui--tasks-filter "ALL"
   "Current filter for the Tasks tab.")
@@ -3046,7 +3049,7 @@ orgro sparse-filter parity item."
 ;;; glasspane-capture.el --- Glasspane UI component -*- lexical-binding: t; -*-
 ;;; Code:
 
-(require 'glasspane-ui)
+;; (require 'glasspane-ui) — bundle-internal, provided above
 
 (defun glasspane-ui--push-widget ()
   "Push the `widget:agenda' surface backing the home-screen widget.
@@ -3277,7 +3280,7 @@ appears on the next replay."
 ;;; glasspane-detail.el --- Glasspane UI component -*- lexical-binding: t; -*-
 ;;; Code:
 
-(require 'glasspane-ui)
+;; (require 'glasspane-ui) — bundle-internal, provided above
 
 (defvar glasspane-ui--detail-ref nil
   "Reference alist (id/file/pos/headline) of the heading being viewed, or nil.")
@@ -4458,7 +4461,7 @@ container would break Compose) and wrap otherwise."
 ;;; glasspane-search.el --- Glasspane UI component -*- lexical-binding: t; -*-
 ;;; Code:
 
-(require 'glasspane-ui)
+;; (require 'glasspane-ui) — bundle-internal, provided above
 
 (defvar glasspane-ui--search-query ""
   "Last submitted query for the Search view.")
@@ -4688,7 +4691,7 @@ Returns \"\" when every filter is at its resting value."
 ;;; glasspane-table.el --- Glasspane UI component -*- lexical-binding: t; -*-
 ;;; Code:
 
-(require 'glasspane-ui)
+;; (require 'glasspane-ui) — bundle-internal, provided above
 
 (with-jetpacs-owner "glasspane"
   (jetpacs-defaction "org.footnote.show"
@@ -4983,9 +4986,9 @@ are not resolved — those cells stay value-editable."
 (require 'jetpacs-surfaces)
 (require 'jetpacs-shell)
 (require 'jetpacs-settings)
-(require 'glasspane-org)
-(require 'glasspane-org-reader)
-(require 'glasspane-ui)                ; date helpers + the glasspane defapp
+;; (require 'glasspane-org) — bundle-internal, provided above
+;; (require 'glasspane-org-reader) — bundle-internal, provided above
+;; (require 'glasspane-ui)                ; date helpers + the glasspane defapp — bundle-internal, provided above
 
 (defcustom glasspane-journal-file nil
   "The journal file holding the datetree.
@@ -5266,9 +5269,9 @@ not exist in jetpacs 1.5.0; until it does, this seam stays on the raw var."
 (require 'jetpacs-surfaces)
 (require 'jetpacs-shell)
 (require 'jetpacs-settings)
-(require 'glasspane-org)
-(require 'glasspane-ui)
-(require 'glasspane-agenda)             ; date helpers + the month fallback grid
+;; (require 'glasspane-org) — bundle-internal, provided above
+;; (require 'glasspane-ui) — bundle-internal, provided above
+;; (require 'glasspane-agenda)             ; date helpers + the month fallback grid — bundle-internal, provided above
 
 (defcustom glasspane-saved-views nil
   "Saved query views: a list of alists with `name', `query', `rendering'.
@@ -5915,7 +5918,7 @@ Field ids come from the `jetpacs-form' registry; views.save reads them."
 (require 'jetpacs)
 (require 'jetpacs-triggers)
 (require 'jetpacs-shell)
-(require 'glasspane-org)
+;; (require 'glasspane-org) — bundle-internal, provided above
 
 (defcustom glasspane-automations-file nil
   "The org file holding trigger rules.
@@ -6113,7 +6116,7 @@ the file is the source of truth for the `org/' id namespace."
 (require 'jetpacs-source)
 (require 'jetpacs-shell)
 (require 'jetpacs-sync)
-(require 'glasspane-org)
+;; (require 'glasspane-org) — bundle-internal, provided above
 
 (declare-function vulpea-db-search-by-title "vulpea-db-query")
 (declare-function vulpea-db-query-by-links-some "vulpea-db-query")
@@ -6606,8 +6609,8 @@ the file-level (level 0) note names the file best when present."
 (require 'jetpacs-buffer)
 (require 'jetpacs-shell)
 (require 'jetpacs-settings)
-(require 'glasspane-org)
-(require 'glasspane-notes)
+;; (require 'glasspane-org) — bundle-internal, provided above
+;; (require 'glasspane-notes) — bundle-internal, provided above
 
 (declare-function org-srs-review-pending-items "org-srs-review")
 (declare-function org-srs-review-postpone "org-srs-review")
@@ -7355,7 +7358,7 @@ Best-effort: a snapshot failure must not block the rating."
 
 (require 'org)
 (require 'jetpacs-surfaces)
-(require 'glasspane-srs)               ; SRS registration for the flashcards
+;; (require 'glasspane-srs)               ; SRS registration for the flashcards — bundle-internal, provided above
 
 (defcustom glasspane-demo-directory "~/glasspane-demo/"
   "Directory `glasspane-demo-setup' writes the tour files into.
@@ -8586,7 +8589,7 @@ build) — nothing is written until the user opts in explicitly via
 (require 'jetpacs-shell)
 (require 'jetpacs-settings)
 (require 'jetpacs-config)
-(require 'glasspane-config)
+;; (require 'glasspane-config) — bundle-internal, provided above
 
 (declare-function vulpea-db-autosync-mode "vulpea-db" (&optional arg))
 (declare-function vulpea-db-sync-full-scan "vulpea-db" ())
@@ -8853,22 +8856,22 @@ generated `glasspane-pack.json' is byte-stable."
 
 ;;; Code:
 
-(require 'glasspane-ui)
-(require 'glasspane-source)
-(require 'glasspane-agenda)
-(require 'glasspane-capture)
-(require 'glasspane-detail)
-(require 'glasspane-search)
-(require 'glasspane-table)
-(require 'glasspane-journal)
-(require 'glasspane-views)
-(require 'glasspane-automations)
-(require 'glasspane-notes)
-(require 'glasspane-srs)
-(require 'glasspane-gallery)
-(require 'glasspane-config)
-(require 'glasspane-packages)
-(require 'glasspane-pack)
+;; (require 'glasspane-ui) — bundle-internal, provided above
+;; (require 'glasspane-source) — bundle-internal, provided above
+;; (require 'glasspane-agenda) — bundle-internal, provided above
+;; (require 'glasspane-capture) — bundle-internal, provided above
+;; (require 'glasspane-detail) — bundle-internal, provided above
+;; (require 'glasspane-search) — bundle-internal, provided above
+;; (require 'glasspane-table) — bundle-internal, provided above
+;; (require 'glasspane-journal) — bundle-internal, provided above
+;; (require 'glasspane-views) — bundle-internal, provided above
+;; (require 'glasspane-automations) — bundle-internal, provided above
+;; (require 'glasspane-notes) — bundle-internal, provided above
+;; (require 'glasspane-srs) — bundle-internal, provided above
+;; (require 'glasspane-gallery) — bundle-internal, provided above
+;; (require 'glasspane-config) — bundle-internal, provided above
+;; (require 'glasspane-packages) — bundle-internal, provided above
+;; (require 'glasspane-pack) — bundle-internal, provided above
 
 ;; The app-managed defaults (capture templates, agenda wiring): under
 ;; the foundation flow (listed in ~/.emacs.d/jetpacs/apps.el) a missing

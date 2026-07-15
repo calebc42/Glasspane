@@ -27,3 +27,17 @@ EMACS="${EMACS:-emacs}"
   -l glasspane-ui-test \
   -l glasspane-views-test \
   -f ert-run-tests-batch-and-exit </dev/null
+
+# The foundation byte-compiles an adopted bundle BEFORE loading it, when
+# none of the bundle's own features exist on the load-path — a surviving
+# bundle-internal hard require is a compile error and a broken .elc on
+# device.  Compile the shipped bundle against the core bundle alone
+# (exactly the device situation) to pin that.
+tmp=$(mktemp -d)
+trap 'rm -rf "$tmp"' EXIT
+cp jetpacs/jetpacs-core.el glasspane.el "$tmp"/
+"$EMACS" -Q --batch -L "$tmp" --eval "(progn (require 'bytecomp)
+  (let ((byte-compile-warnings nil))
+    (unless (byte-compile-file \"$tmp/glasspane.el\")
+      (kill-emacs 1))))"
+echo "bundle byte-compiles standalone: OK"

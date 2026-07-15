@@ -60,19 +60,37 @@
             ";; GENERATED FILE -- do not edit by hand.\n"
             ";; Produced by emacs/build-bundle.el from the emacs/apps/ sources.\n"
             ";; Concatenated in dependency order; each part keeps its own `provide',\n"
-            ";; so the inter-file `require' forms resolve within this file.\n"
+            ";; and the bundle-internal `require' forms are commented out so the\n"
+            ";; file BYTE-COMPILES standalone: the foundation compiles an adopted\n"
+            ";; bundle before loading it, when none of these features exist yet —\n"
+            ";; a surviving hard require is a compile error and a broken .elc.\n"
             ";;\n"
             ";; Requires the Jetpacs core (jetpacs-core.el) on `load-path' first.\n"
             ";;\n"
             ";;; Code:\n\n"
             "(require 'jetpacs-core)\n\n")
-    (dolist (f app-files)
-      (insert ";;; ==================================================================\n"
-              (format ";;; BEGIN %s\n" f)
-              ";;; ==================================================================\n\n")
-      (insert-file-contents (expand-file-name f here))
-      (goto-char (point-max))
-      (insert "\n"))
+    ;; The features this bundle itself provides: a hard `(require 'X)' on
+    ;; one of these must not survive into the output.  At load time it was
+    ;; already a no-op (the providing chunk sits earlier in the file); at
+    ;; compile time it tries the load-path, where these features never
+    ;; exist as files.  Soft requires — (require 'x nil t) — are left
+    ;; alone: they compile quietly and still no-op or degrade at load.
+    (let ((internal (mapcar (lambda (f) (file-name-base f)) app-files)))
+      (dolist (f app-files)
+        (insert ";;; ==================================================================\n"
+                (format ";;; BEGIN %s\n" f)
+                ";;; ==================================================================\n\n")
+        (let ((start (point)))
+          (insert-file-contents (expand-file-name f here))
+          (goto-char (point-max))
+          (save-excursion
+            (goto-char start)
+            (while (re-search-forward
+                    "^(require '\\([-a-z]+\\))[ \t]*\\(?:;.*\\)?$" nil t)
+              (when (member (match-string 1) internal)
+                (replace-match ";; \\& — bundle-internal, provided above"
+                               t nil)))))
+        (insert "\n")))
     (insert "(provide 'glasspane)\n"
             ";;; glasspane.el ends here\n"))
   (message "Wrote %s" out))
