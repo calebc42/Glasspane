@@ -25,7 +25,8 @@ a full id link via the candidate `insert' attr."
                               (cdr result))))))
 
 (ert-deftest glasspane-notes-backlink-section ()
-  "The detail section lists linked references and the mentions button."
+  "The detail section lists linked references; the mentions scan lives
+on the floating toolbar, so the section only points at it."
   (jetpacs-tests--with-fake-vulpea
       '((:id "src-1" :title "Travel log" :path "/v/log.org"))
     (let* ((glasspane-notes--mentions (make-hash-table :test 'equal))
@@ -34,12 +35,26 @@ a full id link via the candidate `insert' attr."
                                  :null-object :null :false-object :false)))
       (should (string-search "Linked references (1)" json))
       (should (string-search "Travel log" json))
-      (should (string-search "notes.mentions" json))
+      (should (string-search "Not scanned yet" json))
       ;; The backlink card opens the referenced heading in the detail
       ;; view (`heading.tap'), not the raw file.
       (should (string-search "heading.tap" json)))
     ;; No id in the ref → no section at all.
     (should-not (glasspane-notes-detail-nodes '((file . "/v/x.org"))))))
+
+(ert-deftest glasspane-notes-detail-toolbar-chip ()
+  "The floating-toolbar contribution carries the mentions scan action;
+no id resolvable → no chip."
+  (jetpacs-tests--with-fake-vulpea
+      '((:id "src-1" :title "Travel log" :path "/v/log.org"))
+    (let ((json (json-serialize
+                 (jetpacs-tests--canon
+                  (apply #'jetpacs-column
+                         (glasspane-notes-detail-toolbar '((id . "abc-1")))))
+                 :null-object :null :false-object :false)))
+      (should (string-search "Mentions" json))
+      (should (string-search "notes.mentions" json)))
+    (should-not (glasspane-notes-detail-toolbar '((file . "/v/x.org"))))))
 
 (ert-deftest glasspane-notes-ref-id-resolves-from-heading ()
   "A reader-built ref (file/pos, no id) still finds the heading's :ID:,

@@ -56,6 +56,14 @@ re-pushing is cheap."
    (seq-take (condition-case nil (glasspane-org--search query) (error nil))
              20)))
 
+(defun glasspane-ui--detail-toolbar-extras (ref)
+  "Every registered app layer's floating-toolbar chips for REF.
+An erroring contributor costs its own chips, never the toolbar."
+  (when ref
+    (cl-loop for fn in glasspane-ui-detail-toolbar-functions
+             append (condition-case nil (funcall fn ref)
+                      (error nil)))))
+
 (defun glasspane-ui--detail-view (snackbar)
   "The heading drill-in: reader/editor body under curated heading actions."
   (let* ((ref glasspane-ui--detail-ref)
@@ -97,8 +105,13 @@ re-pushing is cheap."
                  (jetpacs-bottom-bar
                   (list
                    (jetpacs-nav-item
-                    "note_add" "New Note"
+                    "edit_note" "Log Note"
                     (jetpacs-action "heading.add-note"
+                                 :args glasspane-ui--detail-ref
+                                 :when-offline "drop"))
+                   (jetpacs-nav-item
+                    "post_add" "Add Heading"
+                    (jetpacs-action "heading.add-heading"
                                  :args glasspane-ui--detail-ref
                                  :when-offline "drop")))))
    :floating-toolbar (when glasspane-ui--detail-read-mode
@@ -113,7 +126,8 @@ re-pushing is cheap."
                           "archive" "Archive"
                           (jetpacs-action "heading.archive"
                                        :args glasspane-ui--detail-ref
-                                       :when-offline "drop")))))
+                                       :when-offline "drop")))
+                        (glasspane-ui--detail-toolbar-extras ref)))
    :snackbar snackbar)))
 
 (with-jetpacs-owner "glasspane"
@@ -920,6 +934,31 @@ container would break Compose) and wrap otherwise."
                                      (replace-regexp-in-string "\n" "\n  " note)))))
                  t)
             (jetpacs-shell-notify "Note added")))
+        (jetpacs-shell-push))))
+
+  (jetpacs-defaction "heading.add-heading"
+    ;; Bridged prompt for the title; the new heading lands as a child at
+    ;; the end of this subtree (or top-level at the end of a file-level
+    ;; note, where there is no subtree to nest under).
+    (lambda (args _)
+      (let ((title (string-trim (condition-case nil
+                                    (read-string "New heading: ")
+                                  (quit "")))))
+        (if (string-empty-p title)
+            (jetpacs-shell-notify "Heading cancelled")
+          (when (glasspane-ui--at-ref
+                 args
+                 (lambda ()
+                   (if (org-before-first-heading-p)
+                       (progn (goto-char (point-max))
+                              (unless (bolp) (insert "\n"))
+                              (insert "* " title "\n"))
+                     (let ((level (org-current-level)))
+                       (org-end-of-subtree t t)
+                       (unless (bolp) (insert "\n"))
+                       (insert (make-string (1+ level) ?*) " " title "\n"))))
+                 t)
+            (jetpacs-shell-notify (format "Added \"%s\"" title))))
         (jetpacs-shell-push))))
 
   (jetpacs-defaction "heading.prop-set"

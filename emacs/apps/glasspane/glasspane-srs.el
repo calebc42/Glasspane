@@ -738,20 +738,16 @@ Best-effort: a snapshot failure must not block the rating."
                   (format "Flashcard: %s" (error-message-string err))))))
       (jetpacs-shell-push))))
 
-(defun glasspane-srs-detail-nodes (ref)
-  "The detail-view section for REF: make this heading reviewable."
+(defun glasspane-srs-detail-toolbar (ref)
+  "The detail floating-toolbar chip for REF: make this heading reviewable."
   (when (glasspane-srs-available-p)
-    (list (jetpacs-divider)
-          (jetpacs-row
-           (jetpacs-box (list (jetpacs-text "Spaced repetition" 'caption))
-                     :weight 1)
-           (jetpacs-button "Make flashcard"
-                        (jetpacs-action "srs.item.create"
-                                     :args ref
-                                     :when-offline "drop")
-                        :variant "text" :icon "school")))))
+    (list (jetpacs-nav-item
+           "school" "Flashcard"
+           (jetpacs-action "srs.item.create"
+                        :args ref
+                        :when-offline "drop")))))
 
-(add-hook 'glasspane-ui-detail-nodes-functions #'glasspane-srs-detail-nodes)
+(add-hook 'glasspane-ui-detail-toolbar-functions #'glasspane-srs-detail-toolbar)
 
 ;; ─── Settings ────────────────────────────────────────────────────────────────
 

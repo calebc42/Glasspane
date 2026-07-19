@@ -2132,6 +2132,12 @@ App layers (notes backlinks, SRS flashcards) contribute detail-view
 sections here; each returns a node list or nil.  An erroring function
 costs its own section, never the body.")
 
+(defvar glasspane-ui-detail-toolbar-functions nil
+  "Abnormal hook: functions from a detail REF to floating-toolbar items.
+App layers contribute `jetpacs-nav-item' chips after the built-in
+Refile/Archive pair; each returns an item list or nil.  An erroring
+function costs its own chips, never the toolbar.")
+
 (defun glasspane-ui--at-ref (args fn &optional save)
   "Resolve ARGS to its heading and call FN with point there.
 With SAVE non-nil, save the buffer afterwards (guarded against
@@ -3427,6 +3433,14 @@ re-pushing is cheap."
    (seq-take (condition-case nil (glasspane-org--search query) (error nil))
              20)))
 
+(defun glasspane-ui--detail-toolbar-extras (ref)
+  "Every registered app layer's floating-toolbar chips for REF.
+An erroring contributor costs its own chips, never the toolbar."
+  (when ref
+    (cl-loop for fn in glasspane-ui-detail-toolbar-functions
+             append (condition-case nil (funcall fn ref)
+                      (error nil)))))
+
 (defun glasspane-ui--detail-view (snackbar)
   "The heading drill-in: reader/editor body under curated heading actions."
   (let* ((ref glasspane-ui--detail-ref)
@@ -3468,8 +3482,13 @@ re-pushing is cheap."
                  (jetpacs-bottom-bar
                   (list
                    (jetpacs-nav-item
-                    "note_add" "New Note"
+                    "edit_note" "Log Note"
                     (jetpacs-action "heading.add-note"
+                                 :args glasspane-ui--detail-ref
+                                 :when-offline "drop"))
+                   (jetpacs-nav-item
+                    "post_add" "Add Heading"
+                    (jetpacs-action "heading.add-heading"
                                  :args glasspane-ui--detail-ref
                                  :when-offline "drop")))))
    :floating-toolbar (when glasspane-ui--detail-read-mode
@@ -3484,7 +3503,8 @@ re-pushing is cheap."
                           "archive" "Archive"
                           (jetpacs-action "heading.archive"
                                        :args glasspane-ui--detail-ref
-                                       :when-offline "drop")))))
+                                       :when-offline "drop")))
+                        (glasspane-ui--detail-toolbar-extras ref)))
    :snackbar snackbar)))
 
 (with-jetpacs-owner "glasspane"
@@ -4291,6 +4311,31 @@ container would break Compose) and wrap otherwise."
                                      (replace-regexp-in-string "\n" "\n  " note)))))
                  t)
             (jetpacs-shell-notify "Note added")))
+        (jetpacs-shell-push))))
+
+  (jetpacs-defaction "heading.add-heading"
+    ;; Bridged prompt for the title; the new heading lands as a child at
+    ;; the end of this subtree (or top-level at the end of a file-level
+    ;; note, where there is no subtree to nest under).
+    (lambda (args _)
+      (let ((title (string-trim (condition-case nil
+                                    (read-string "New heading: ")
+                                  (quit "")))))
+        (if (string-empty-p title)
+            (jetpacs-shell-notify "Heading cancelled")
+          (when (glasspane-ui--at-ref
+                 args
+                 (lambda ()
+                   (if (org-before-first-heading-p)
+                       (progn (goto-char (point-max))
+                              (unless (bolp) (insert "\n"))
+                              (insert "* " title "\n"))
+                     (let ((level (org-current-level)))
+                       (org-end-of-subtree t t)
+                       (unless (bolp) (insert "\n"))
+                       (insert (make-string (1+ level) ?*) " " title "\n"))))
+                 t)
+            (jetpacs-shell-notify (format "Added \"%s\"" title))))
         (jetpacs-shell-push))))
 
   (jetpacs-defaction "heading.prop-set"
@@ -6462,11 +6507,9 @@ vulpea is unavailable or ID is blank — never an error."
                  (found (format "Unlinked mentions (%d)" (length found)))))
               (pcase mentions
                 ('unfetched
-                 (list (jetpacs-button
-                        "Find mentions"
-                        (jetpacs-action "notes.mentions" :args `((id . ,id))
-                                     :when-offline "drop")
-                        :variant "text" :icon "manage_search")))
+                 (list (jetpacs-text
+                        "Not scanned yet — tap Mentions in the toolbar."
+                        'caption)))
                 ('pending (list (jetpacs-progress :variant "linear")))
                 ('error (list (jetpacs-text "ripgrep unavailable or the search failed."
                                          'caption)))
@@ -6476,8 +6519,19 @@ vulpea is unavailable or ID is blank — never an error."
                                found)))
               :collapsed (eq mentions 'unfetched)))))))
 
+(defun glasspane-notes-detail-toolbar (ref)
+  "The detail floating-toolbar chip for REF: scan for unlinked mentions.
+Results land in the Unlinked mentions section of the body; a re-tap
+re-runs the scan."
+  (when-let* (((glasspane-notes-available-p))
+              (id (glasspane-notes--ref-id ref)))
+    (list (jetpacs-nav-item
+           "manage_search" "Mentions"
+           (jetpacs-action "notes.mentions" :args `((id . ,id))
+                        :when-offline "drop")))))
+
 ;; The mention grep is the battery-risk item: computed only on the
-;; explicit button tap, cached per note, dropped by the standard seam.
+;; explicit chip tap, cached per note, dropped by the standard seam.
 (with-jetpacs-owner "glasspane"
   (jetpacs-defaction "notes.mentions"
     (lambda (args _)
@@ -6568,8 +6622,10 @@ must not nest a link inside a link."
 (add-hook 'jetpacs-shell-refresh-hook
           (lambda () (clrhash glasspane-notes--mentions)))
 
-;; The detail view splices this module's sections through the ui seam.
+;; The detail view splices this module's sections and toolbar chip
+;; through the ui seams.
 (add-hook 'glasspane-ui-detail-nodes-functions #'glasspane-notes-detail-nodes)
+(add-hook 'glasspane-ui-detail-toolbar-functions #'glasspane-notes-detail-toolbar)
 
 ;; ─── Stale files: the vulpea half of the Review view ────────────────────────
 ;; vulpea-db-query-stale-notes joins the files table's real mtime; a file
@@ -7399,20 +7455,16 @@ Best-effort: a snapshot failure must not block the rating."
                   (format "Flashcard: %s" (error-message-string err))))))
       (jetpacs-shell-push))))
 
-(defun glasspane-srs-detail-nodes (ref)
-  "The detail-view section for REF: make this heading reviewable."
+(defun glasspane-srs-detail-toolbar (ref)
+  "The detail floating-toolbar chip for REF: make this heading reviewable."
   (when (glasspane-srs-available-p)
-    (list (jetpacs-divider)
-          (jetpacs-row
-           (jetpacs-box (list (jetpacs-text "Spaced repetition" 'caption))
-                     :weight 1)
-           (jetpacs-button "Make flashcard"
-                        (jetpacs-action "srs.item.create"
-                                     :args ref
-                                     :when-offline "drop")
-                        :variant "text" :icon "school")))))
+    (list (jetpacs-nav-item
+           "school" "Flashcard"
+           (jetpacs-action "srs.item.create"
+                        :args ref
+                        :when-offline "drop")))))
 
-(add-hook 'glasspane-ui-detail-nodes-functions #'glasspane-srs-detail-nodes)
+(add-hook 'glasspane-ui-detail-toolbar-functions #'glasspane-srs-detail-toolbar)
 
 ;; ─── Settings ────────────────────────────────────────────────────────────────
 

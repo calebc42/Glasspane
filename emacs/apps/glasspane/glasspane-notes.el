@@ -281,11 +281,9 @@ vulpea is unavailable or ID is blank — never an error."
                  (found (format "Unlinked mentions (%d)" (length found)))))
               (pcase mentions
                 ('unfetched
-                 (list (jetpacs-button
-                        "Find mentions"
-                        (jetpacs-action "notes.mentions" :args `((id . ,id))
-                                     :when-offline "drop")
-                        :variant "text" :icon "manage_search")))
+                 (list (jetpacs-text
+                        "Not scanned yet — tap Mentions in the toolbar."
+                        'caption)))
                 ('pending (list (jetpacs-progress :variant "linear")))
                 ('error (list (jetpacs-text "ripgrep unavailable or the search failed."
                                          'caption)))
@@ -295,8 +293,19 @@ vulpea is unavailable or ID is blank — never an error."
                                found)))
               :collapsed (eq mentions 'unfetched)))))))
 
+(defun glasspane-notes-detail-toolbar (ref)
+  "The detail floating-toolbar chip for REF: scan for unlinked mentions.
+Results land in the Unlinked mentions section of the body; a re-tap
+re-runs the scan."
+  (when-let* (((glasspane-notes-available-p))
+              (id (glasspane-notes--ref-id ref)))
+    (list (jetpacs-nav-item
+           "manage_search" "Mentions"
+           (jetpacs-action "notes.mentions" :args `((id . ,id))
+                        :when-offline "drop")))))
+
 ;; The mention grep is the battery-risk item: computed only on the
-;; explicit button tap, cached per note, dropped by the standard seam.
+;; explicit chip tap, cached per note, dropped by the standard seam.
 (with-jetpacs-owner "glasspane"
   (jetpacs-defaction "notes.mentions"
     (lambda (args _)
@@ -387,8 +396,10 @@ must not nest a link inside a link."
 (add-hook 'jetpacs-shell-refresh-hook
           (lambda () (clrhash glasspane-notes--mentions)))
 
-;; The detail view splices this module's sections through the ui seam.
+;; The detail view splices this module's sections and toolbar chip
+;; through the ui seams.
 (add-hook 'glasspane-ui-detail-nodes-functions #'glasspane-notes-detail-nodes)
+(add-hook 'glasspane-ui-detail-toolbar-functions #'glasspane-notes-detail-toolbar)
 
 ;; ─── Stale files: the vulpea half of the Review view ────────────────────────
 ;; vulpea-db-query-stale-notes joins the files table's real mtime; a file
