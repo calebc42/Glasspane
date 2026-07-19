@@ -1760,13 +1760,28 @@ title)."
             (apply #'jetpacs-column (delq nil (list line meta tag-row)))
           line)))))
 
+(defun glasspane-org-reader-swipe-sides (ref)
+  "The (START . END) per-side swipe actions for REF's heading.
+Rightward reveals the todo cycle (green), leftward Archive (red, its
+handler confirms).  Shared with the agenda/tasks cards."
+  (cons (jetpacs-swipe-action "check" "Cycle"
+                           (jetpacs-action "heading.todo-cycle" :args ref)
+                           :color "#4CAF50")
+        (jetpacs-swipe-action "archive" "Archive"
+                           (jetpacs-action "heading.archive" :args ref
+                                        :when-offline "drop")
+                           :color "#E53935")))
+
 (defun glasspane-org-reader--heading-node (n file)
   "Render tree node N (and its subtree) to a foldable `jetpacs-collapsible'.
 Long-pressing the header opens the heading detail view when FILE is
-available; the trailing overflow menu carries the quick actions."
+available; the trailing overflow menu carries the quick actions, and
+the header swipes: right = todo cycle, left = archive (legacy
+single-action on_swipe kept for older companions)."
   (let* ((pos (plist-get n :pos))
          (ref (when file
                 `((file . ,file) (pos . ,pos) (headline . ""))))
+         (sides (and ref (glasspane-org-reader-swipe-sides ref)))
          (header (glasspane-org-reader--heading-header n)))
     (jetpacs-collapsible (format "fold/%s/%s" file pos)
                       (if ref
@@ -1779,7 +1794,9 @@ available; the trailing overflow menu carries the quick actions."
                       :on-long-tap (when ref
                                      (jetpacs-action "heading.tap" :args ref))
                       :on-swipe (when ref
-                                  (jetpacs-action "heading.todo-cycle" :args ref)))))
+                                  (jetpacs-action "heading.todo-cycle" :args ref))
+                      :swipe-start (car sides)
+                      :swipe-end (cdr sides))))
 
 ;; ─── Entry points ───────────────────────────────────────────────────────────────
 
@@ -3693,6 +3710,15 @@ ref can't resolve."
     (jetpacs-nav-item "copy_all" "Copy Text"
                    (jetpacs-clipboard-action text))))
 
+(defun glasspane-ui--detail-share-item (ref)
+  "The Share chip for REF: the whole subtree through the system share
+sheet (`share.send'), titled with the headline; nil when the ref
+can't resolve."
+  (when-let ((text (glasspane-ui--detail-subtree-text ref)))
+    (jetpacs-nav-item "share" "Share"
+                   (jetpacs-share-action
+                    text :title (alist-get 'headline ref)))))
+
 (defun glasspane-ui--detail-view (snackbar)
   "The heading drill-in: reader/editor body under curated heading actions."
   (let* ((ref glasspane-ui--detail-ref)
@@ -3766,6 +3792,8 @@ ref can't resolve."
                                  (glasspane-ui--detail-copy-link-item ref))
                                (when ref
                                  (glasspane-ui--detail-copy-text-item ref))
+                               (when ref
+                                 (glasspane-ui--detail-share-item ref))
                                (jetpacs-nav-item
                                 "delete" "Delete"
                                 (jetpacs-action "heading.delete"
@@ -3847,15 +3875,18 @@ a quick complete button for open todos, and the heading overflow menu."
                                  (mapcar (lambda (tg)
                                            (jetpacs-assist-chip tg :on-tap (jetpacs-action "search.by-tag" :args `((tag . ,tg)))))
                                          tags))))))))
-    (jetpacs-card
-     (list (apply #'jetpacs-row
-                  (delq nil (list lead
-                                  (jetpacs-box (list middle) :weight 1)
-                                  (when ref
-                                    (glasspane-org-reader-heading-menu
-                                     ref (glasspane-ui--ref-clocked-in-p ref)))))))
-     :on-tap (jetpacs-action "heading.tap" :args ref)
-     :on-swipe (jetpacs-action "heading.todo-cycle" :args ref))))
+    (let ((sides (and ref (glasspane-org-reader-swipe-sides ref))))
+      (jetpacs-card
+       (list (apply #'jetpacs-row
+                    (delq nil (list lead
+                                    (jetpacs-box (list middle) :weight 1)
+                                    (when ref
+                                      (glasspane-org-reader-heading-menu
+                                       ref (glasspane-ui--ref-clocked-in-p ref)))))))
+       :on-tap (jetpacs-action "heading.tap" :args ref)
+       :on-swipe (jetpacs-action "heading.todo-cycle" :args ref)
+       :swipe-start (car sides)
+       :swipe-end (cdr sides)))))
 
 ;; The old agenda-files-only "files" body is superseded by the full
 ;; browser in jetpacs-files.el (jetpacs-files-browser-body).

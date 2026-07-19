@@ -412,7 +412,15 @@ chips, the repeater enum, and Clear — all marked to re-send the dialog."
                  :null-object :null :false-object :false)))
       (should (string-search "clipboard.copy" json))
       (should (string-search "The body line." json))
-      (should (string-search "** Child" json)))))
+      (should (string-search "** Child" json)))
+    (let ((json (json-serialize
+                 (jetpacs-tests--canon
+                  (glasspane-ui--detail-share-item
+                   `((file . ,file) (pos . 1) (headline . "Task"))))
+                 :null-object :null :false-object :false)))
+      (should (string-search "share.send" json))
+      (should (string-search "\"title\":\"Task\"" json))
+      (should (string-search "The body line." json)))))
 
 (ert-deftest glasspane-ui-tags-ask-prompts-and-sets ()
   "heading.tags with ask prompts via the bridged crm and replaces the

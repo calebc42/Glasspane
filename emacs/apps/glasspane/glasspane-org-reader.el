@@ -281,13 +281,28 @@ title)."
             (apply #'jetpacs-column (delq nil (list line meta tag-row)))
           line)))))
 
+(defun glasspane-org-reader-swipe-sides (ref)
+  "The (START . END) per-side swipe actions for REF's heading.
+Rightward reveals the todo cycle (green), leftward Archive (red, its
+handler confirms).  Shared with the agenda/tasks cards."
+  (cons (jetpacs-swipe-action "check" "Cycle"
+                           (jetpacs-action "heading.todo-cycle" :args ref)
+                           :color "#4CAF50")
+        (jetpacs-swipe-action "archive" "Archive"
+                           (jetpacs-action "heading.archive" :args ref
+                                        :when-offline "drop")
+                           :color "#E53935")))
+
 (defun glasspane-org-reader--heading-node (n file)
   "Render tree node N (and its subtree) to a foldable `jetpacs-collapsible'.
 Long-pressing the header opens the heading detail view when FILE is
-available; the trailing overflow menu carries the quick actions."
+available; the trailing overflow menu carries the quick actions, and
+the header swipes: right = todo cycle, left = archive (legacy
+single-action on_swipe kept for older companions)."
   (let* ((pos (plist-get n :pos))
          (ref (when file
                 `((file . ,file) (pos . ,pos) (headline . ""))))
+         (sides (and ref (glasspane-org-reader-swipe-sides ref)))
          (header (glasspane-org-reader--heading-header n)))
     (jetpacs-collapsible (format "fold/%s/%s" file pos)
                       (if ref
@@ -300,7 +315,9 @@ available; the trailing overflow menu carries the quick actions."
                       :on-long-tap (when ref
                                      (jetpacs-action "heading.tap" :args ref))
                       :on-swipe (when ref
-                                  (jetpacs-action "heading.todo-cycle" :args ref)))))
+                                  (jetpacs-action "heading.todo-cycle" :args ref))
+                      :swipe-start (car sides)
+                      :swipe-end (cdr sides))))
 
 ;; ─── Entry points ───────────────────────────────────────────────────────────────
 

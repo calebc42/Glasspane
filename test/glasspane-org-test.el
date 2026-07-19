@@ -234,7 +234,13 @@ the clocked-in heading offers Clock Out instead of Clock In."
             (should (string-search "heading.tags" json))
             (should (string-search "heading.props.show" json))
             (should (string-search "heading.duplicate" json))
-            (should (string-search "\"ask\":true" json))))
+            (should (string-search "\"ask\":true" json))
+            ;; Per-side swipes ride the same headers: right = cycle,
+            ;; left = archive (handler confirms), legacy on_swipe kept.
+            (should (string-search "swipe_start" json))
+            (should (string-search "swipe_end" json))
+            (should (string-search "heading.archive" json))
+            (should (string-search "on_swipe" json))))
       (when-let ((buf (find-buffer-visiting file))) (kill-buffer buf))
       (delete-file file))))
 
