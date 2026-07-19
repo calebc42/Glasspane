@@ -214,6 +214,17 @@ light-up) brought up."
 Bound around our own programmatic saves (heading edits, file saves) so an
 explicit dashboard push isn't doubled by the save-hook firing on top.")
 
+(declare-function vulpea-db-update-file "vulpea-db-extract")
+
+(defun glasspane-org--vulpea-refresh-file (&optional buffer)
+  "Synchronously re-index BUFFER's file in vulpea's db, when vulpea is up.
+Vulpea's autosync applies saves on a short batch/idle timer, so a
+mutation that immediately re-renders (todo swipe → push) would read
+the stale row back out of the index.  No-op without vulpea."
+  (when (fboundp 'vulpea-db-update-file)
+    (when-let ((f (buffer-file-name (or buffer (current-buffer)))))
+      (ignore-errors (vulpea-db-update-file f)))))
+
 (defun glasspane-org--save-and-invalidate (&optional buffer)
   "Synchronously save BUFFER (default: current buffer); drop the org memo.
 The shared tail of every mutation outside `glasspane-ui--at-ref' —
@@ -223,7 +234,8 @@ suppressed so the caller's explicit repush isn't doubled."
   (with-current-buffer (or buffer (current-buffer))
     (let ((glasspane-org--inhibit-save-refresh t)
           (save-silently t))
-      (save-buffer)))
+      (save-buffer))
+    (glasspane-org--vulpea-refresh-file))
   (jetpacs-org-cache-invalidate 'glasspane))
 
 ;; The dashboard pushes every view on every action (so navigation stays
@@ -324,6 +336,17 @@ Returns a list of alists representing agenda items.  Memoised; see
         (kill-buffer buf)))
     (nreverse items)))
 
+(defun glasspane-org--priority-string (p)
+  "Normalize priority P to its display letter, or nil.
+Vulpea stores org-element's raw :priority — the char code (65 for A) —
+and SQLite may hand it back as that integer or its decimal string;
+org-map-entries paths already carry the letter."
+  (cond ((null p) nil)
+        ((integerp p) (char-to-string p))
+        ((and (stringp p) (string-match-p "\\`[0-9]+\\'" p))
+         (char-to-string (string-to-number p)))
+        ((stringp p) p)))
+
 (defun glasspane-org--vulpea-note-to-item (note)
   "Convert a `vulpea-note' to a Glasspane item alist."
   (let ((id (vulpea-note-id note))
@@ -332,7 +355,7 @@ Returns a list of alists representing agenda items.  Memoised; see
         (pos (vulpea-note-pos note)))
     `((headline . ,title)
       (todo . ,(vulpea-note-todo note))
-      (priority . ,(vulpea-note-priority note))
+      (priority . ,(glasspane-org--priority-string (vulpea-note-priority note)))
       (tags . ,(vconcat (vulpea-note-tags note)))
       (scheduled . ,(vulpea-note-scheduled note))
       (deadline  . ,(vulpea-note-deadline note))
@@ -1602,7 +1625,7 @@ detail view already shows properties in its own section)."
             (save-excursion (goto-char org-clock-hd-marker)
                             (line-beginning-position))))))
 
-(defun glasspane-org-reader--heading-menu (ref clocked-in)
+(defun glasspane-org-reader-heading-menu (ref clocked-in)
   "The per-heading overflow menu: quick actions without the detail drill-in.
 Schedule/Deadline/Priority/Tags arrive with no value, which the
 handlers answer with a bridged prompt dialog."
@@ -1697,7 +1720,7 @@ available; the trailing overflow menu carries the quick actions."
                       (if ref
                           (jetpacs-row
                            (jetpacs-box (list header) :weight 1)
-                           (glasspane-org-reader--heading-menu
+                           (glasspane-org-reader-heading-menu
                             ref (glasspane-org-reader--clocked-in-p pos)))
                         header)
                       (glasspane-org-reader--content-nodes n file)
@@ -2284,7 +2307,11 @@ error UX are app policy and stay here."
           (when save
             (let ((glasspane-org--inhibit-save-refresh t)
                   (save-silently t))
-              (save-buffer))))
+              (save-buffer))
+            ;; Read-after-write: vulpea's autosync lags the save on an
+            ;; idle timer, and the push right after this would render
+            ;; the stale row (tasks view todo/priority).
+            (glasspane-org--vulpea-refresh-file)))
         (jetpacs-org-cache-invalidate 'glasspane)
         t)
     (error
@@ -3668,11 +3695,28 @@ companion-local (`clipboard.copy') and works offline."
                           :overlay (lambda () (and glasspane-ui--detail-ref t))
                           :order 110))
 
+(defun glasspane-ui--ref-clocked-in-p (ref)
+  "Whether REF's heading is the currently clocked task.
+A file that isn't even visited can't be the clock source, so this
+stays cheap across a list of cards."
+  (when-let* ((file (alist-get 'file ref))
+              (pos (alist-get 'pos ref))
+              (buf (find-buffer-visiting file)))
+    (and (bound-and-true-p org-clock-hd-marker)
+         (eq (marker-buffer org-clock-hd-marker) buf)
+         (integerp pos)
+         (with-current-buffer buf
+           (org-with-wide-buffer
+            (= (progn (goto-char (min pos (point-max)))
+                      (line-beginning-position))
+               (progn (goto-char org-clock-hd-marker)
+                      (line-beginning-position))))))))
+
 (defun glasspane-ui--agenda-card (it)
   "A detail-rich agenda card for item IT.
 Leading time (or a type icon), priority-prefixed headline (struck
 through when done), a todo/type/file caption, tag chips when present,
-and a quick complete button for open todos."
+a quick complete button for open todos, and the heading overflow menu."
   (let* ((headline (or (alist-get 'headline it) "Untitled"))
          (todo (alist-get 'todo it))
          ;; Normalized "HH:MM" — the raw property is a time-grid string
@@ -3721,7 +3765,10 @@ and a quick complete button for open todos."
     (jetpacs-card
      (list (apply #'jetpacs-row
                   (delq nil (list lead
-                                  (jetpacs-box (list middle) :weight 1)))))
+                                  (jetpacs-box (list middle) :weight 1)
+                                  (when ref
+                                    (glasspane-org-reader-heading-menu
+                                     ref (glasspane-ui--ref-clocked-in-p ref)))))))
      :on-tap (jetpacs-action "heading.tap" :args ref)
      :on-swipe (jetpacs-action "heading.todo-cycle" :args ref))))
 
@@ -4481,6 +4528,7 @@ the end of the file."
                    (let ((glasspane-org--inhibit-save-refresh t)
                          (save-silently t))
                      (org-save-all-org-buffers))
+                   (glasspane-org--vulpea-refresh-file)
                    (jetpacs-org-cache-invalidate 'glasspane)
                    (setq glasspane-ui--detail-ref nil)
                    (jetpacs-shell-notify (format "Refiled to %s" choice))))))
@@ -4502,7 +4550,8 @@ the end of the file."
                    (org-archive-subtree)
                    (let ((glasspane-org--inhibit-save-refresh t)
                          (save-silently t))
-                     (org-save-all-org-buffers))))
+                     (org-save-all-org-buffers))
+                   (glasspane-org--vulpea-refresh-file)))
             (setq glasspane-ui--detail-ref nil)
             (jetpacs-shell-notify "Archived")))
         (jetpacs-shell-push nil :switch-to (jetpacs-shell-current-tab)))))

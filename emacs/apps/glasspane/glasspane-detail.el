@@ -169,11 +169,28 @@ companion-local (`clipboard.copy') and works offline."
                           :overlay (lambda () (and glasspane-ui--detail-ref t))
                           :order 110))
 
+(defun glasspane-ui--ref-clocked-in-p (ref)
+  "Whether REF's heading is the currently clocked task.
+A file that isn't even visited can't be the clock source, so this
+stays cheap across a list of cards."
+  (when-let* ((file (alist-get 'file ref))
+              (pos (alist-get 'pos ref))
+              (buf (find-buffer-visiting file)))
+    (and (bound-and-true-p org-clock-hd-marker)
+         (eq (marker-buffer org-clock-hd-marker) buf)
+         (integerp pos)
+         (with-current-buffer buf
+           (org-with-wide-buffer
+            (= (progn (goto-char (min pos (point-max)))
+                      (line-beginning-position))
+               (progn (goto-char org-clock-hd-marker)
+                      (line-beginning-position))))))))
+
 (defun glasspane-ui--agenda-card (it)
   "A detail-rich agenda card for item IT.
 Leading time (or a type icon), priority-prefixed headline (struck
 through when done), a todo/type/file caption, tag chips when present,
-and a quick complete button for open todos."
+a quick complete button for open todos, and the heading overflow menu."
   (let* ((headline (or (alist-get 'headline it) "Untitled"))
          (todo (alist-get 'todo it))
          ;; Normalized "HH:MM" — the raw property is a time-grid string
@@ -222,7 +239,10 @@ and a quick complete button for open todos."
     (jetpacs-card
      (list (apply #'jetpacs-row
                   (delq nil (list lead
-                                  (jetpacs-box (list middle) :weight 1)))))
+                                  (jetpacs-box (list middle) :weight 1)
+                                  (when ref
+                                    (glasspane-org-reader-heading-menu
+                                     ref (glasspane-ui--ref-clocked-in-p ref)))))))
      :on-tap (jetpacs-action "heading.tap" :args ref)
      :on-swipe (jetpacs-action "heading.todo-cycle" :args ref))))
 
@@ -982,6 +1002,7 @@ the end of the file."
                    (let ((glasspane-org--inhibit-save-refresh t)
                          (save-silently t))
                      (org-save-all-org-buffers))
+                   (glasspane-org--vulpea-refresh-file)
                    (jetpacs-org-cache-invalidate 'glasspane)
                    (setq glasspane-ui--detail-ref nil)
                    (jetpacs-shell-notify (format "Refiled to %s" choice))))))
@@ -1003,7 +1024,8 @@ the end of the file."
                    (org-archive-subtree)
                    (let ((glasspane-org--inhibit-save-refresh t)
                          (save-silently t))
-                     (org-save-all-org-buffers))))
+                     (org-save-all-org-buffers))
+                   (glasspane-org--vulpea-refresh-file)))
             (setq glasspane-ui--detail-ref nil)
             (jetpacs-shell-notify "Archived")))
         (jetpacs-shell-push nil :switch-to (jetpacs-shell-current-tab)))))

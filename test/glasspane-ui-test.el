@@ -320,6 +320,34 @@ and heading.priority (ask) through a bridged read-string."
     (should (string-search "* [#B] Task"
                            (glasspane-ui-test--file-content file)))))
 
+(ert-deftest glasspane-ui-mutation-refreshes-vulpea-index ()
+  "A saved heading mutation re-indexes its file synchronously — vulpea's
+autosync lags on an idle timer, and the push right after the mutation
+must not read the stale row (the tasks-view swipe bug)."
+  (glasspane-ui-test--with-org-file "* Task\n"
+    (let (updated)
+      (cl-letf (((symbol-function 'vulpea-db-update-file)
+                 (lambda (path) (push path updated) 1)))
+        (jetpacs--on-action
+         `((action . "heading.todo-set")
+           (args . ((state . "TODO") (file . ,file) (pos . 1)
+                    (headline . "Task"))))
+         nil))
+      (should (equal (mapcar #'file-truename updated)
+                     (list (file-truename file)))))))
+
+(ert-deftest glasspane-ui-agenda-card-carries-overflow-menu ()
+  "Agenda/tasks cards embed the heading overflow menu next to the body."
+  (let* ((card (glasspane-ui--agenda-card
+                '((headline . "Task") (todo . "TODO")
+                  (ref . ((file . "/tmp/x.org") (pos . 1)
+                          (headline . "Task"))))))
+         (json (json-serialize (jetpacs-tests--canon card)
+                               :null-object :null :false-object :false)))
+    (should (string-search "\"menu\"" json))
+    (should (string-search "heading.schedule" json))
+    (should (string-search "heading.props.show" json))))
+
 (ert-deftest glasspane-ui-tags-ask-prompts-and-sets ()
   "heading.tags with ask prompts via the bridged crm and replaces the
 heading's tags with the reply."

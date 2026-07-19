@@ -313,7 +313,11 @@ error UX are app policy and stay here."
           (when save
             (let ((glasspane-org--inhibit-save-refresh t)
                   (save-silently t))
-              (save-buffer))))
+              (save-buffer))
+            ;; Read-after-write: vulpea's autosync lags the save on an
+            ;; idle timer, and the push right after this would render
+            ;; the stale row (tasks view todo/priority).
+            (glasspane-org--vulpea-refresh-file)))
         (jetpacs-org-cache-invalidate 'glasspane)
         t)
     (error

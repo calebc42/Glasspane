@@ -146,7 +146,7 @@ detail view already shows properties in its own section)."
             (save-excursion (goto-char org-clock-hd-marker)
                             (line-beginning-position))))))
 
-(defun glasspane-org-reader--heading-menu (ref clocked-in)
+(defun glasspane-org-reader-heading-menu (ref clocked-in)
   "The per-heading overflow menu: quick actions without the detail drill-in.
 Schedule/Deadline/Priority/Tags arrive with no value, which the
 handlers answer with a bridged prompt dialog."
@@ -241,7 +241,7 @@ available; the trailing overflow menu carries the quick actions."
                       (if ref
                           (jetpacs-row
                            (jetpacs-box (list header) :weight 1)
-                           (glasspane-org-reader--heading-menu
+                           (glasspane-org-reader-heading-menu
                             ref (glasspane-org-reader--clocked-in-p pos)))
                         header)
                       (glasspane-org-reader--content-nodes n file)

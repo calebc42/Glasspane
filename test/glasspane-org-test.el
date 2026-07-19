@@ -236,6 +236,15 @@ the clocked-in heading offers Clock Out instead of Clock In."
       (when-let ((buf (find-buffer-visiting file))) (kill-buffer buf))
       (delete-file file))))
 
+(ert-deftest glasspane-org-priority-string-normalizes ()
+  "Vulpea hands back org-element's raw :priority (the char code, or its
+decimal string via SQLite); the items must carry the letter."
+  (should (equal (glasspane-org--priority-string ?A) "A"))
+  (should (equal (glasspane-org--priority-string 66) "B"))
+  (should (equal (glasspane-org--priority-string "67") "C"))
+  (should (equal (glasspane-org--priority-string "A") "A"))
+  (should-not (glasspane-org--priority-string nil)))
+
 (ert-deftest glasspane-org-reader-pretty-headers ()
   "Reader headers render structured: colored todo/priority spans, a
 struck-through done title, and tag chips — not the raw org line."
