@@ -1490,6 +1490,11 @@ elements (checkboxes)."
     (goto-char pos)
     (let* ((comps (org-heading-components))
            (level (or (nth 0 comps) 1))
+           (todo (nth 2 comps))
+           (priority (nth 3 comps))
+           (title (or (nth 4 comps) ""))
+           (tags (ignore-errors (org-get-tags pos t)))
+           (done (and todo (member todo org-done-keywords) t))
            (line (buffer-substring-no-properties
                   (line-beginning-position) (line-end-position)))
            (props (ignore-errors (org-entry-properties pos 'standard)))
@@ -1508,6 +1513,8 @@ elements (checkboxes)."
            (body (car body-info))
            (body-start (cadr body-info)))
       (list :level level :pos pos :line line :props props
+            :todo todo :priority (and priority (char-to-string priority))
+            :title title :tags tags :done done
             :body body :body-start body-start))))
 
 (defun glasspane-org-reader--collect (beg end include-first)
@@ -1554,6 +1561,11 @@ INCLUDE-FIRST non-nil includes the heading at BEG (used for subtrees)."
                       (list (jetpacs-text text 'mono))
                       :collapsed t)))
 
+(defvar glasspane-org-reader-inline-props t
+  "When nil, PROPERTIES drawers are not rendered inline under headings.
+The detail view binds this off: its per-heading overflow menu offers
+the drawer as an editable dialog (heading.props.show) instead.")
+
 (defun glasspane-org-reader--content-nodes (n file &optional skip-props)
   "Inline content nodes for tree node N: PROPERTIES drawer, body, child headings.
 When SKIP-PROPS is non-nil, omit the PROPERTIES drawer (used when the
@@ -1565,7 +1577,7 @@ detail view already shows properties in its own section)."
         (children (plist-get n :children)))
     (delq nil
           (append
-           (when (and props (not skip-props))
+           (when (and props (not skip-props) glasspane-org-reader-inline-props)
              (list (glasspane-org-reader--props-node props file pos)))
            (when (and body (not (string-empty-p body)))
              ;; Native rich text (emphasis, links, #tags) instead of the
@@ -1592,8 +1604,8 @@ detail view already shows properties in its own section)."
 
 (defun glasspane-org-reader--heading-menu (ref clocked-in)
   "The per-heading overflow menu: quick actions without the detail drill-in.
-Schedule/Deadline/Priority arrive with no value, which the handlers
-answer with a bridged prompt dialog."
+Schedule/Deadline/Priority/Tags arrive with no value, which the
+handlers answer with a bridged prompt dialog."
   (jetpacs-menu
    (list
     (jetpacs-menu-item "Open" (jetpacs-action "heading.tap" :args ref)
@@ -1617,7 +1629,61 @@ answer with a bridged prompt dialog."
     (jetpacs-menu-item "Deadline…"
                     (jetpacs-action "heading.deadline" :args ref
                                  :when-offline "drop")
-                    :icon "event_busy"))))
+                    :icon "event_busy")
+    (jetpacs-menu-item "Tags…"
+                    (jetpacs-action "heading.tags"
+                                 :args (cons '(ask . t) ref)
+                                 :when-offline "drop")
+                    :icon "label")
+    (jetpacs-menu-item "Properties"
+                    (jetpacs-action "heading.props.show" :args ref
+                                 :when-offline "drop")
+                    :icon "data_object"))))
+
+(defconst glasspane-org-reader--todo-color "#EF5350"
+  "Span color for open TODO keywords in reader headers.")
+(defconst glasspane-org-reader--done-color "#66BB6A"
+  "Span color for done keywords in reader headers.")
+(defconst glasspane-org-reader--priority-color "#F57C00"
+  "Span color for priority cookies (matches the agenda cards).")
+
+(defun glasspane-org-reader--heading-header (n)
+  "The structured header for tree node N.
+Todo keyword and priority render as colored spans, the title strikes
+through when done, and tags become tappable chips — instead of the
+raw org heading line.  Falls back to org markup when the heading
+didn't parse (no title)."
+  (let ((todo (plist-get n :todo))
+        (priority (plist-get n :priority))
+        (title (plist-get n :title))
+        (tags (plist-get n :tags))
+        (done (plist-get n :done)))
+    (if (string-empty-p (or title ""))
+        (jetpacs-markup (plist-get n :line) :syntax "org")
+      (let ((line (jetpacs-rich-text
+                   (delq nil
+                         (list
+                          (when todo
+                            (jetpacs-span (concat todo " ") :bold t
+                                       :color (if done
+                                                  glasspane-org-reader--done-color
+                                                glasspane-org-reader--todo-color)))
+                          (when priority
+                            (jetpacs-span (format "[#%s] " priority) :bold t
+                                       :color glasspane-org-reader--priority-color))
+                          (if done
+                              (jetpacs-span title :strike t)
+                            (jetpacs-span title)))))))
+        (if tags
+            (jetpacs-column
+             line
+             (apply #'jetpacs-flow-row
+                    (mapcar (lambda (tg)
+                              (jetpacs-assist-chip
+                               tg :on-tap (jetpacs-action "search.by-tag"
+                                                       :args `((tag . ,tg)))))
+                            tags)))
+          line)))))
 
 (defun glasspane-org-reader--heading-node (n file)
   "Render tree node N (and its subtree) to a foldable `jetpacs-collapsible'.
@@ -1626,14 +1692,14 @@ available; the trailing overflow menu carries the quick actions."
   (let* ((pos (plist-get n :pos))
          (ref (when file
                 `((file . ,file) (pos . ,pos) (headline . ""))))
-         (line (jetpacs-markup (plist-get n :line) :syntax "org")))
+         (header (glasspane-org-reader--heading-header n)))
     (jetpacs-collapsible (format "fold/%s/%s" file pos)
                       (if ref
                           (jetpacs-row
-                           (jetpacs-box (list line) :weight 1)
+                           (jetpacs-box (list header) :weight 1)
                            (glasspane-org-reader--heading-menu
                             ref (glasspane-org-reader--clocked-in-p pos)))
-                        line)
+                        header)
                       (glasspane-org-reader--content-nodes n file)
                       :on-long-tap (when ref
                                      (jetpacs-action "heading.tap" :args ref))
@@ -4182,8 +4248,11 @@ container would break Compose) and wrap otherwise."
                            (glasspane-ui--properties-section entry-props ref pos)
                            (jetpacs-divider))
                           ;; Reader: body (highlighted) and child headings (foldable).
-                          ;; Properties are shown above, so skip them here.
-                          (glasspane-org-reader-subtree file pos t)))))))
+                          ;; Properties are shown above (and for sub-headings
+                          ;; through the overflow menu's dialog), so no
+                          ;; inline drawers here.
+                          (let ((glasspane-org-reader-inline-props nil))
+                            (glasspane-org-reader-subtree file pos t))))))))
     (error
      (jetpacs-column
       (jetpacs-text "Error loading heading" 'title)
@@ -4532,19 +4601,87 @@ the end of the file."
           (jetpacs-shell-notify (format "Added %s — fill in its value" (upcase name)))))
         (jetpacs-shell-push))))
 
+  (jetpacs-defaction "heading.props.show"
+    ;; The sub-heading Properties dialog: the detail reader hides the
+    ;; inline drawer, and this overflow-menu action surfaces it as
+    ;; editable rows through the same heading.prop-set funnel.
+    (lambda (args _)
+      (condition-case err
+          (let* ((marker (jetpacs-org-resolve-ref args))
+                 (buf (marker-buffer marker))
+                 (pos (marker-position marker))
+                 (info (with-current-buffer buf
+                         (org-with-wide-buffer
+                          (goto-char pos)
+                          (list (org-get-heading t t t t)
+                                (org-entry-properties nil 'standard)
+                                (buffer-file-name)))))
+                 (headline (nth 0 info))
+                 (props (nth 1 info))
+                 (ref `((file . ,(nth 2 info)) (pos . ,pos)
+                        (headline . ,headline))))
+            (jetpacs-send-dialog
+             (apply #'jetpacs-scroll-column
+                    (delq nil
+                     (append
+                     (list (jetpacs-text "Properties" 'title)
+                           (jetpacs-text headline 'caption))
+                     (or (mapcar (lambda (kv)
+                                   (glasspane-ui--property-row
+                                    (car kv) (or (cdr kv) "") ref pos))
+                                 props)
+                         (list (jetpacs-text "No properties yet." 'caption)))
+                     (list
+                      (when props
+                        (jetpacs-text "Submit an empty value to remove a property."
+                                   'caption))
+                      (jetpacs-row
+                       (jetpacs-button "+ Add property"
+                                    (jetpacs-action "heading.prop-add" :args ref)
+                                    :variant "text")
+                       (jetpacs-spacer :weight 1)
+                       (jetpacs-button "Close" (jetpacs-action "dialog.dismiss")
+                                    :variant "text"))))))))
+        (error
+         (jetpacs-shell-notify (format "Properties: %s" (error-message-string err)))
+         (jetpacs-shell-push)))))
+
   (jetpacs-defaction "heading.tags"
     (lambda (args _)
+      ;; VALUE arrives from the tag enum-list; ASK (the overflow-menu path)
+      ;; prompts through the bridged completing-read-multiple, prefilled
+      ;; with the heading's current local tags.
       (let* ((val (alist-get 'value args))
-             (tags (cond
-                    ((vectorp val) (append val nil))
-                    ((listp val) val)
-                    ((stringp val) (split-string val "[ \t:,]+" t))
-                    (t nil)))
-             (ok (glasspane-ui--at-ref args (lambda () (org-set-tags tags)) t)))
-        (when ok
-          (jetpacs-shell-notify (if tags (format "Tags: %s" (string-join tags " "))
-                                  "Tags cleared"))
-          (jetpacs-shell-push)))))
+             (cancelled nil))
+        (when (and (alist-get 'ask args) (null val))
+          (let ((current (condition-case nil
+                             (let ((m (jetpacs-org-resolve-ref args)))
+                               (with-current-buffer (marker-buffer m)
+                                 (org-with-wide-buffer
+                                  (goto-char m)
+                                  (org-get-tags nil t))))
+                           (error nil)))
+                (candidates (seq-filter #'stringp
+                                        (mapcar (lambda (x) (if (consp x) (car x) x))
+                                                org-tag-alist))))
+            (setq val (condition-case nil
+                          (completing-read-multiple
+                           "Tags: " candidates nil nil
+                           (when current (concat (string-join current ",") ",")))
+                        (quit (setq cancelled t) nil)))))
+        (if cancelled
+            (progn (jetpacs-shell-notify "Tags cancelled")
+                   (jetpacs-shell-push))
+          (let* ((tags (cond
+                        ((vectorp val) (append val nil))
+                        ((listp val) val)
+                        ((stringp val) (split-string val "[ \t:,]+" t))
+                        (t nil)))
+                 (ok (glasspane-ui--at-ref args (lambda () (org-set-tags tags)) t)))
+            (when ok
+              (jetpacs-shell-notify (if tags (format "Tags: %s" (string-join tags " "))
+                                      "Tags cleared"))
+              (jetpacs-shell-push)))))))
 
   (jetpacs-defaction "heading.clock-in"
     (lambda (args _)
@@ -6674,27 +6811,25 @@ vulpea is unavailable or ID is blank — never an error."
               (or (mapcar #'glasspane-notes--note-card backlinks)
                   (list (jetpacs-text "Nothing links here yet." 'caption)))
               :collapsed (null backlinks)))
-       (list (jetpacs-collapsible
-              (concat "mentions/" id)
-              (jetpacs-section-header
-               (pcase mentions
-                 ('unfetched "Unlinked mentions")
-                 ('pending "Unlinked mentions (searching…)")
-                 ('error "Unlinked mentions (search failed)")
-                 (found (format "Unlinked mentions (%d)" (length found)))))
-              (pcase mentions
-                ('unfetched
-                 (list (jetpacs-text
-                        "Not scanned yet — tap Mentions in the toolbar."
-                        'caption)))
-                ('pending (list (jetpacs-progress :variant "linear")))
-                ('error (list (jetpacs-text "ripgrep unavailable or the search failed."
-                                         'caption)))
-                ('nil (list (jetpacs-text "No unlinked mentions." 'caption)))
-                (found (mapcar (lambda (m)
-                                 (glasspane-notes--mention-card m id))
-                               found)))
-              :collapsed (eq mentions 'unfetched)))))))
+       ;; The mentions section only exists once a scan has been asked
+       ;; for (the toolbar chip) — an unscanned note gets no chrome.
+       (unless (eq mentions 'unfetched)
+         (list (jetpacs-collapsible
+                (concat "mentions/" id)
+                (jetpacs-section-header
+                 (pcase mentions
+                   ('pending "Unlinked mentions (searching…)")
+                   ('error "Unlinked mentions (search failed)")
+                   (found (format "Unlinked mentions (%d)" (length found)))))
+                (pcase mentions
+                  ('pending (list (jetpacs-progress :variant "linear")))
+                  ('error (list (jetpacs-text "ripgrep unavailable or the search failed."
+                                           'caption)))
+                  ('nil (list (jetpacs-text "No unlinked mentions." 'caption)))
+                  (found (mapcar (lambda (m)
+                                   (glasspane-notes--mention-card m id))
+                                 found)))
+                :collapsed nil)))))))
 
 (defun glasspane-notes-detail-toolbar (ref)
   "The detail floating-toolbar chip for REF: scan for unlinked mentions.

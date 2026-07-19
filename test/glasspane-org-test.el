@@ -230,7 +230,53 @@ the clocked-in heading offers Clock Out instead of Clock In."
             (should (string-search "heading.schedule" json))
             (should (string-search "heading.deadline" json))
             (should (string-search "heading.priority" json))
+            (should (string-search "heading.tags" json))
+            (should (string-search "heading.props.show" json))
             (should (string-search "\"ask\":true" json))))
+      (when-let ((buf (find-buffer-visiting file))) (kill-buffer buf))
+      (delete-file file))))
+
+(ert-deftest glasspane-org-reader-pretty-headers ()
+  "Reader headers render structured: colored todo/priority spans, a
+struck-through done title, and tag chips — not the raw org line."
+  (let ((file (make-temp-file "jetpacs-pretty-test" nil ".org")))
+    (unwind-protect
+        (progn
+          (with-temp-file file
+            (insert "* TODO [#A] Fix the backup job :urgent:infra:\n"
+                    "* DONE Migrate the sync\n"))
+          (let ((json (json-serialize
+                       (jetpacs-tests--canon
+                        (apply #'jetpacs-column (glasspane-org-reader-file file)))
+                       :null-object :null :false-object :false)))
+            ;; Tags are chips, not ":urgent:infra:" text.
+            (should-not (string-search ":urgent:infra:" json))
+            (should (string-search "search.by-tag" json))
+            (should (string-search "\"urgent\"" json))
+            (should (string-search "[#A] " json))
+            (should (string-search "Fix the backup job" json))
+            ;; The done heading strikes through.
+            (should (string-search "\"strike\":true" json))))
+      (when-let ((buf (find-buffer-visiting file))) (kill-buffer buf))
+      (delete-file file))))
+
+(ert-deftest glasspane-org-reader-inline-props-switch ()
+  "Binding `glasspane-org-reader-inline-props' off (the detail view)
+drops the inline PROPERTIES drawers from reader output."
+  (let ((file (make-temp-file "jetpacs-props-test" nil ".org")))
+    (unwind-protect
+        (progn
+          (with-temp-file file
+            (insert "* Top\n** Child\n:PROPERTIES:\n:KIND: demo\n:END:\n"))
+          (let ((props-p (lambda (n)
+                           (and (equal (alist-get 't n) "collapsible")
+                                (equal (alist-get 'text (alist-get 'header n))
+                                       "PROPERTIES")))))
+            (should (jetpacs-tests--find-node
+                     (glasspane-org-reader-subtree file 1 t) props-p))
+            (let ((glasspane-org-reader-inline-props nil))
+              (should-not (jetpacs-tests--find-node
+                           (glasspane-org-reader-subtree file 1 t) props-p)))))
       (when-let ((buf (find-buffer-visiting file))) (kill-buffer buf))
       (delete-file file))))
 

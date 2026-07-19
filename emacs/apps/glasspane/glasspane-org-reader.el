@@ -34,6 +34,11 @@ elements (checkboxes)."
     (goto-char pos)
     (let* ((comps (org-heading-components))
            (level (or (nth 0 comps) 1))
+           (todo (nth 2 comps))
+           (priority (nth 3 comps))
+           (title (or (nth 4 comps) ""))
+           (tags (ignore-errors (org-get-tags pos t)))
+           (done (and todo (member todo org-done-keywords) t))
            (line (buffer-substring-no-properties
                   (line-beginning-position) (line-end-position)))
            (props (ignore-errors (org-entry-properties pos 'standard)))
@@ -52,6 +57,8 @@ elements (checkboxes)."
            (body (car body-info))
            (body-start (cadr body-info)))
       (list :level level :pos pos :line line :props props
+            :todo todo :priority (and priority (char-to-string priority))
+            :title title :tags tags :done done
             :body body :body-start body-start))))
 
 (defun glasspane-org-reader--collect (beg end include-first)
@@ -98,6 +105,11 @@ INCLUDE-FIRST non-nil includes the heading at BEG (used for subtrees)."
                       (list (jetpacs-text text 'mono))
                       :collapsed t)))
 
+(defvar glasspane-org-reader-inline-props t
+  "When nil, PROPERTIES drawers are not rendered inline under headings.
+The detail view binds this off: its per-heading overflow menu offers
+the drawer as an editable dialog (heading.props.show) instead.")
+
 (defun glasspane-org-reader--content-nodes (n file &optional skip-props)
   "Inline content nodes for tree node N: PROPERTIES drawer, body, child headings.
 When SKIP-PROPS is non-nil, omit the PROPERTIES drawer (used when the
@@ -109,7 +121,7 @@ detail view already shows properties in its own section)."
         (children (plist-get n :children)))
     (delq nil
           (append
-           (when (and props (not skip-props))
+           (when (and props (not skip-props) glasspane-org-reader-inline-props)
              (list (glasspane-org-reader--props-node props file pos)))
            (when (and body (not (string-empty-p body)))
              ;; Native rich text (emphasis, links, #tags) instead of the
@@ -136,8 +148,8 @@ detail view already shows properties in its own section)."
 
 (defun glasspane-org-reader--heading-menu (ref clocked-in)
   "The per-heading overflow menu: quick actions without the detail drill-in.
-Schedule/Deadline/Priority arrive with no value, which the handlers
-answer with a bridged prompt dialog."
+Schedule/Deadline/Priority/Tags arrive with no value, which the
+handlers answer with a bridged prompt dialog."
   (jetpacs-menu
    (list
     (jetpacs-menu-item "Open" (jetpacs-action "heading.tap" :args ref)
@@ -161,7 +173,61 @@ answer with a bridged prompt dialog."
     (jetpacs-menu-item "Deadline…"
                     (jetpacs-action "heading.deadline" :args ref
                                  :when-offline "drop")
-                    :icon "event_busy"))))
+                    :icon "event_busy")
+    (jetpacs-menu-item "Tags…"
+                    (jetpacs-action "heading.tags"
+                                 :args (cons '(ask . t) ref)
+                                 :when-offline "drop")
+                    :icon "label")
+    (jetpacs-menu-item "Properties"
+                    (jetpacs-action "heading.props.show" :args ref
+                                 :when-offline "drop")
+                    :icon "data_object"))))
+
+(defconst glasspane-org-reader--todo-color "#EF5350"
+  "Span color for open TODO keywords in reader headers.")
+(defconst glasspane-org-reader--done-color "#66BB6A"
+  "Span color for done keywords in reader headers.")
+(defconst glasspane-org-reader--priority-color "#F57C00"
+  "Span color for priority cookies (matches the agenda cards).")
+
+(defun glasspane-org-reader--heading-header (n)
+  "The structured header for tree node N.
+Todo keyword and priority render as colored spans, the title strikes
+through when done, and tags become tappable chips — instead of the
+raw org heading line.  Falls back to org markup when the heading
+didn't parse (no title)."
+  (let ((todo (plist-get n :todo))
+        (priority (plist-get n :priority))
+        (title (plist-get n :title))
+        (tags (plist-get n :tags))
+        (done (plist-get n :done)))
+    (if (string-empty-p (or title ""))
+        (jetpacs-markup (plist-get n :line) :syntax "org")
+      (let ((line (jetpacs-rich-text
+                   (delq nil
+                         (list
+                          (when todo
+                            (jetpacs-span (concat todo " ") :bold t
+                                       :color (if done
+                                                  glasspane-org-reader--done-color
+                                                glasspane-org-reader--todo-color)))
+                          (when priority
+                            (jetpacs-span (format "[#%s] " priority) :bold t
+                                       :color glasspane-org-reader--priority-color))
+                          (if done
+                              (jetpacs-span title :strike t)
+                            (jetpacs-span title)))))))
+        (if tags
+            (jetpacs-column
+             line
+             (apply #'jetpacs-flow-row
+                    (mapcar (lambda (tg)
+                              (jetpacs-assist-chip
+                               tg :on-tap (jetpacs-action "search.by-tag"
+                                                       :args `((tag . ,tg)))))
+                            tags)))
+          line)))))
 
 (defun glasspane-org-reader--heading-node (n file)
   "Render tree node N (and its subtree) to a foldable `jetpacs-collapsible'.
@@ -170,14 +236,14 @@ available; the trailing overflow menu carries the quick actions."
   (let* ((pos (plist-get n :pos))
          (ref (when file
                 `((file . ,file) (pos . ,pos) (headline . ""))))
-         (line (jetpacs-markup (plist-get n :line) :syntax "org")))
+         (header (glasspane-org-reader--heading-header n)))
     (jetpacs-collapsible (format "fold/%s/%s" file pos)
                       (if ref
                           (jetpacs-row
-                           (jetpacs-box (list line) :weight 1)
+                           (jetpacs-box (list header) :weight 1)
                            (glasspane-org-reader--heading-menu
                             ref (glasspane-org-reader--clocked-in-p pos)))
-                        line)
+                        header)
                       (glasspane-org-reader--content-nodes n file)
                       :on-long-tap (when ref
                                      (jetpacs-action "heading.tap" :args ref))

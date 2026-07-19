@@ -749,8 +749,11 @@ container would break Compose) and wrap otherwise."
                            (glasspane-ui--properties-section entry-props ref pos)
                            (jetpacs-divider))
                           ;; Reader: body (highlighted) and child headings (foldable).
-                          ;; Properties are shown above, so skip them here.
-                          (glasspane-org-reader-subtree file pos t)))))))
+                          ;; Properties are shown above (and for sub-headings
+                          ;; through the overflow menu's dialog), so no
+                          ;; inline drawers here.
+                          (let ((glasspane-org-reader-inline-props nil))
+                            (glasspane-org-reader-subtree file pos t))))))))
     (error
      (jetpacs-column
       (jetpacs-text "Error loading heading" 'title)
@@ -1099,19 +1102,87 @@ the end of the file."
           (jetpacs-shell-notify (format "Added %s — fill in its value" (upcase name)))))
         (jetpacs-shell-push))))
 
+  (jetpacs-defaction "heading.props.show"
+    ;; The sub-heading Properties dialog: the detail reader hides the
+    ;; inline drawer, and this overflow-menu action surfaces it as
+    ;; editable rows through the same heading.prop-set funnel.
+    (lambda (args _)
+      (condition-case err
+          (let* ((marker (jetpacs-org-resolve-ref args))
+                 (buf (marker-buffer marker))
+                 (pos (marker-position marker))
+                 (info (with-current-buffer buf
+                         (org-with-wide-buffer
+                          (goto-char pos)
+                          (list (org-get-heading t t t t)
+                                (org-entry-properties nil 'standard)
+                                (buffer-file-name)))))
+                 (headline (nth 0 info))
+                 (props (nth 1 info))
+                 (ref `((file . ,(nth 2 info)) (pos . ,pos)
+                        (headline . ,headline))))
+            (jetpacs-send-dialog
+             (apply #'jetpacs-scroll-column
+                    (delq nil
+                     (append
+                     (list (jetpacs-text "Properties" 'title)
+                           (jetpacs-text headline 'caption))
+                     (or (mapcar (lambda (kv)
+                                   (glasspane-ui--property-row
+                                    (car kv) (or (cdr kv) "") ref pos))
+                                 props)
+                         (list (jetpacs-text "No properties yet." 'caption)))
+                     (list
+                      (when props
+                        (jetpacs-text "Submit an empty value to remove a property."
+                                   'caption))
+                      (jetpacs-row
+                       (jetpacs-button "+ Add property"
+                                    (jetpacs-action "heading.prop-add" :args ref)
+                                    :variant "text")
+                       (jetpacs-spacer :weight 1)
+                       (jetpacs-button "Close" (jetpacs-action "dialog.dismiss")
+                                    :variant "text"))))))))
+        (error
+         (jetpacs-shell-notify (format "Properties: %s" (error-message-string err)))
+         (jetpacs-shell-push)))))
+
   (jetpacs-defaction "heading.tags"
     (lambda (args _)
+      ;; VALUE arrives from the tag enum-list; ASK (the overflow-menu path)
+      ;; prompts through the bridged completing-read-multiple, prefilled
+      ;; with the heading's current local tags.
       (let* ((val (alist-get 'value args))
-             (tags (cond
-                    ((vectorp val) (append val nil))
-                    ((listp val) val)
-                    ((stringp val) (split-string val "[ \t:,]+" t))
-                    (t nil)))
-             (ok (glasspane-ui--at-ref args (lambda () (org-set-tags tags)) t)))
-        (when ok
-          (jetpacs-shell-notify (if tags (format "Tags: %s" (string-join tags " "))
-                                  "Tags cleared"))
-          (jetpacs-shell-push)))))
+             (cancelled nil))
+        (when (and (alist-get 'ask args) (null val))
+          (let ((current (condition-case nil
+                             (let ((m (jetpacs-org-resolve-ref args)))
+                               (with-current-buffer (marker-buffer m)
+                                 (org-with-wide-buffer
+                                  (goto-char m)
+                                  (org-get-tags nil t))))
+                           (error nil)))
+                (candidates (seq-filter #'stringp
+                                        (mapcar (lambda (x) (if (consp x) (car x) x))
+                                                org-tag-alist))))
+            (setq val (condition-case nil
+                          (completing-read-multiple
+                           "Tags: " candidates nil nil
+                           (when current (concat (string-join current ",") ",")))
+                        (quit (setq cancelled t) nil)))))
+        (if cancelled
+            (progn (jetpacs-shell-notify "Tags cancelled")
+                   (jetpacs-shell-push))
+          (let* ((tags (cond
+                        ((vectorp val) (append val nil))
+                        ((listp val) val)
+                        ((stringp val) (split-string val "[ \t:,]+" t))
+                        (t nil)))
+                 (ok (glasspane-ui--at-ref args (lambda () (org-set-tags tags)) t)))
+            (when ok
+              (jetpacs-shell-notify (if tags (format "Tags: %s" (string-join tags " "))
+                                      "Tags cleared"))
+              (jetpacs-shell-push)))))))
 
   (jetpacs-defaction "heading.clock-in"
     (lambda (args _)

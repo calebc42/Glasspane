@@ -25,8 +25,8 @@ a full id link via the candidate `insert' attr."
                               (cdr result))))))
 
 (ert-deftest glasspane-notes-backlink-section ()
-  "The detail section lists linked references; the mentions scan lives
-on the floating toolbar, so the section only points at it."
+  "The detail section lists linked references; the mentions section
+appears only once a scan has been asked for (toolbar chip)."
   (jetpacs-tests--with-fake-vulpea
       '((:id "src-1" :title "Travel log" :path "/v/log.org"))
     (let* ((glasspane-notes--mentions (make-hash-table :test 'equal))
@@ -35,10 +35,23 @@ on the floating toolbar, so the section only points at it."
                                  :null-object :null :false-object :false)))
       (should (string-search "Linked references (1)" json))
       (should (string-search "Travel log" json))
-      (should (string-search "Not scanned yet" json))
+      ;; Unscanned → no mentions chrome at all.
+      (should-not (string-search "Unlinked mentions" json))
       ;; The backlink card opens the referenced heading in the detail
       ;; view (`heading.tap'), not the raw file.
-      (should (string-search "heading.tap" json)))
+      (should (string-search "heading.tap" json))
+      ;; A completed scan surfaces the section with its results.
+      (puthash "abc-1"
+               '((:note (:id "src-1" :title "Travel log" :path "/v/log.org")
+                  :line 3 :context "the travel log line"))
+               glasspane-notes--mentions)
+      (let ((json (json-serialize
+                   (jetpacs-tests--canon
+                    (apply #'jetpacs-column
+                           (glasspane-notes-detail-nodes '((id . "abc-1")))))
+                   :null-object :null :false-object :false)))
+        (should (string-search "Unlinked mentions (1)" json))
+        (should (string-search "link.materialize" json))))
     ;; No id in the ref → no section at all.
     (should-not (glasspane-notes-detail-nodes '((file . "/v/x.org"))))))
 

@@ -271,27 +271,25 @@ vulpea is unavailable or ID is blank — never an error."
               (or (mapcar #'glasspane-notes--note-card backlinks)
                   (list (jetpacs-text "Nothing links here yet." 'caption)))
               :collapsed (null backlinks)))
-       (list (jetpacs-collapsible
-              (concat "mentions/" id)
-              (jetpacs-section-header
-               (pcase mentions
-                 ('unfetched "Unlinked mentions")
-                 ('pending "Unlinked mentions (searching…)")
-                 ('error "Unlinked mentions (search failed)")
-                 (found (format "Unlinked mentions (%d)" (length found)))))
-              (pcase mentions
-                ('unfetched
-                 (list (jetpacs-text
-                        "Not scanned yet — tap Mentions in the toolbar."
-                        'caption)))
-                ('pending (list (jetpacs-progress :variant "linear")))
-                ('error (list (jetpacs-text "ripgrep unavailable or the search failed."
-                                         'caption)))
-                ('nil (list (jetpacs-text "No unlinked mentions." 'caption)))
-                (found (mapcar (lambda (m)
-                                 (glasspane-notes--mention-card m id))
-                               found)))
-              :collapsed (eq mentions 'unfetched)))))))
+       ;; The mentions section only exists once a scan has been asked
+       ;; for (the toolbar chip) — an unscanned note gets no chrome.
+       (unless (eq mentions 'unfetched)
+         (list (jetpacs-collapsible
+                (concat "mentions/" id)
+                (jetpacs-section-header
+                 (pcase mentions
+                   ('pending "Unlinked mentions (searching…)")
+                   ('error "Unlinked mentions (search failed)")
+                   (found (format "Unlinked mentions (%d)" (length found)))))
+                (pcase mentions
+                  ('pending (list (jetpacs-progress :variant "linear")))
+                  ('error (list (jetpacs-text "ripgrep unavailable or the search failed."
+                                           'caption)))
+                  ('nil (list (jetpacs-text "No unlinked mentions." 'caption)))
+                  (found (mapcar (lambda (m)
+                                   (glasspane-notes--mention-card m id))
+                                 found)))
+                :collapsed nil)))))))
 
 (defun glasspane-notes-detail-toolbar (ref)
   "The detail floating-toolbar chip for REF: scan for unlinked mentions.

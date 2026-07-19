@@ -320,4 +320,38 @@ and heading.priority (ask) through a bridged read-string."
     (should (string-search "* [#B] Task"
                            (glasspane-ui-test--file-content file)))))
 
+(ert-deftest glasspane-ui-tags-ask-prompts-and-sets ()
+  "heading.tags with ask prompts via the bridged crm and replaces the
+heading's tags with the reply."
+  (glasspane-ui-test--with-org-file "* Task :old:\n"
+    (cl-letf (((symbol-function 'completing-read-multiple)
+               (lambda (&rest _) '("home" "urgent"))))
+      (jetpacs--on-action
+       `((action . "heading.tags")
+         (args . ((ask . t) (file . ,file) (pos . 1) (headline . "Task"))))
+       nil))
+    (let ((content (glasspane-ui-test--file-content file)))
+      (should (string-search ":home:urgent:" content))
+      (should-not (string-search ":old:" content)))))
+
+(ert-deftest glasspane-ui-props-show-builds-dialog ()
+  "heading.props.show sends an editable dialog over the heading's
+properties, wired to the heading.prop-set funnel."
+  (glasspane-ui-test--with-org-file
+      "* Task\n:PROPERTIES:\n:KIND: demo\n:END:\n"
+    (let (sent)
+      (cl-letf (((symbol-function 'jetpacs-send-dialog)
+                 (lambda (spec &optional _style) (setq sent spec))))
+        (jetpacs--on-action
+         `((action . "heading.props.show")
+           (args . ((file . ,file) (pos . 1) (headline . "Task"))))
+         nil))
+      (let ((json (json-serialize (jetpacs-tests--canon sent)
+                                  :null-object :null :false-object :false)))
+        (should (string-search "KIND" json))
+        (should (string-search "demo" json))
+        (should (string-search "heading.prop-set" json))
+        (should (string-search "heading.prop-add" json))
+        (should (string-search "dialog.dismiss" json))))))
+
 (provide 'glasspane-ui-test)
