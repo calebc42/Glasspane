@@ -39,6 +39,15 @@ round-trips to Emacs through the ordinary action pipeline."
                                          :snippet (concat stars " ")
                                          :placement "line-start")))
                                     (number-sequence 1 6)))
+   ;; TODO heading (dropdown for levels)
+   (jetpacs-toolbar-item "task_alt" "TODO"
+                      :menu (mapcar (lambda (level)
+                                      (let ((stars (make-string level ?*)))
+                                        (jetpacs-toolbar-item
+                                         nil (format "%s TODO %d" stars level)
+                                         :snippet (concat stars " TODO ")
+                                         :placement "line-start")))
+                                    (number-sequence 1 6)))
    ;; Structure: promote / demote / move up / move down
    (jetpacs-toolbar-item "format_indent_decrease" "←" :line "promote")
    (jetpacs-toolbar-item "format_indent_increase" "→" :line "demote")

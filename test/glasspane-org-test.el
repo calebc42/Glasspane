@@ -253,7 +253,7 @@ vocabulary `jetpacs-lint' checks."
     (let* ((toolbar (alist-get 'toolbar (jetpacs-render-to-json ed)))
            (items (append toolbar nil)))
       (should (vectorp toolbar))
-      (should (= 17 (length items)))
+      (should (= 18 (length items)))
       ;; The long-press secondaries (progress cookie, timestamp) survive.
       (should (= 2 (cl-count-if (lambda (item) (assq 'long_press item)) items)))
       ;; The src menu keeps its free-form ${input:Language} escape.
