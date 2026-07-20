@@ -1,6 +1,10 @@
 # Plan: Emacs packages as jetpacs engines — vulpea first, then the ecosystem
 
-**Status: plan (2026-07-13).** A roadmap for making `jetpacs-composer` able to
+**Status: plan (2026-07-13; status markers amended 2026-07-16 by the
+jetpacs architecture audit — see `jetpacs/docs/AUDIT-architecture-vui-vulpea.md`:
+A.4.4 discharged in the composer, the "no DB-change hook" claim is stale for
+vulpea ≥2.6 worker mode, Part C's install story partially executed).**
+A roadmap for making `jetpacs-composer` able to
 build real apps by leaning on stable, library-first Emacs packages — **vulpea**
 foremost — as engines, exposed to the no-code layer through jetpacs sources /
 actions and installed via the pack dependency model. This is the constructive
@@ -58,7 +62,10 @@ facts:
   tables exist only to push filters into SQL. Backlinks/outgoing are a first-class
   edge list (`links-to`/`links-from`/`backlink-counts` — the last computes *all*
   counts in one grouped query, killing N+1).
-- **No DB-change hook / revision counter.** A source `:cache-key` must synthesize
+- **No DB-change hook / revision counter.** *(Stale for vulpea ≥2.6 worker
+  mode: `vulpea-db-worker-done-functions` fires `(PATH STATUS COUNT)` per
+  finished file — filter STATUS=`applied` for a live-refresh seam. The token
+  below remains the sync-mode fallback.)* A source `:cache-key` must synthesize
   a token: `(cons (vulpea-db-count-notes) <MAX(files.mtime) over the relevant
   scope>)`. Staleness window after a save is ~0.01–0.5s (batch/idle timer); for
   read-after-write correctness, drive the write through `vulpea-db-update-file` /
@@ -141,10 +148,13 @@ Small, independently-shippable, each validates a slice of the blueprint:
 3. **Wrap creation/selection as headless actions** — `notes.create` (over
    `vulpea-create`), `notes.select`/`notes.insert-link` (over `vulpea-select`/
    `-insert` with the pack's `candidates-fn`). Composer-bindable, no capture buffer.
-4. **Prototype one domain extractor** — e.g. a `glasspane.tasks` extractor + table
-   (scoped per-note!) + a source over it, as the reference for "pack ships an
-   extractor." Get the per-note scoping + registration-timing + migration story
-   right once, document it.
+4. **Prototype one domain extractor** — **DISCHARGED (2026-07-16):**
+   `jetpacs-composer/elisp/jetpacs-crud-vulpea.el` is that prototype (tables +
+   checklist extractor, column-vector schema, cascade FKs, per-note scoping) —
+   pending one fix: it maps the AST without declaring `:requires-ast t`, which
+   vulpea ≥2.6 requires (undeclared readers get a nil AST slot and extract
+   nothing). Fix it there and crown it the documented reference; do not build a
+   second prototype.
 5. **Ship a vulpea schema** for a Glasspane note class (authoring hygiene), as the
    reference "pack ships a schema dep."
 6. **Deep-read vulpea-ui / -journal / -para / vino source** (a follow-on workflow)
@@ -223,7 +233,8 @@ line. Cross-check current MELPA/ELPA status and maintenance.
    `sdui-rich-server-not-wire-dsl`).
 2. **Vulpea near-term work** A.4 items 1–3 (cache-key, extra sources, headless
    create/select actions) — small, ship into Glasspane.
-3. **Vulpea extractor prototype** (A.4.4) + doc — the domain-source reference.
+3. **Vulpea extractor prototype** (A.4.4) — discharged in the composer (see
+   A.4.4's status note); remaining work is the `:requires-ast t` fix + doc.
 4. **Ecosystem source-read workflow** (A.3) — vulpea-ui/journal/para/vino patterns.
 5. **Package survey workflow** (B.2) — shortlist capability maps + scores.
 6. **Composer engine-pack model** (Part C.3) — the install/negotiation design
