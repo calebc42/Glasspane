@@ -212,6 +212,125 @@ path) suppresses the raw LOGBOOK drawer its structured section replaces."
       (when-let ((buf (find-buffer-visiting file))) (kill-buffer buf))
       (delete-file file))))
 
+(ert-deftest glasspane-org-reader-heading-overflow-menu ()
+  "Every reader heading header carries the quick-action overflow menu;
+the clocked-in heading offers Clock Out instead of Clock In."
+  (let ((file (make-temp-file "jetpacs-menu-test" nil ".org")))
+    (unwind-protect
+        (progn
+          (with-temp-file file (insert "* Alpha\n* Beta\n"))
+          (let* ((nodes (glasspane-org-reader-file file))
+                 (json (json-serialize
+                        (jetpacs-tests--canon (apply #'jetpacs-column nodes))
+                        :null-object :null :false-object :false)))
+            (should (jetpacs-tests--find-node
+                     nodes (lambda (n) (equal (alist-get 't n) "menu"))))
+            (should (string-search "Clock In" json))
+            (should-not (string-search "Clock Out" json))
+            (should (string-search "heading.planning.show" json))
+            (should (string-search "SCHEDULED" json))
+            (should (string-search "DEADLINE" json))
+            (should (string-search "heading.priority" json))
+            (should (string-search "heading.tags" json))
+            (should (string-search "heading.props.show" json))
+            (should (string-search "heading.duplicate" json))
+            (should (string-search "\"ask\":true" json))
+            ;; Per-side swipes ride the same headers: right = cycle,
+            ;; left = archive (handler confirms), legacy on_swipe kept.
+            (should (string-search "swipe_start" json))
+            (should (string-search "swipe_end" json))
+            (should (string-search "heading.archive" json))
+            (should (string-search "on_swipe" json))))
+      (when-let ((buf (find-buffer-visiting file))) (kill-buffer buf))
+      (delete-file file))))
+
+(ert-deftest glasspane-org-priority-string-normalizes ()
+  "Vulpea hands back org-element's raw :priority (the char code, or its
+decimal string via SQLite); the items must carry the letter."
+  (should (equal (glasspane-org--priority-string ?A) "A"))
+  (should (equal (glasspane-org--priority-string 66) "B"))
+  (should (equal (glasspane-org--priority-string "67") "C"))
+  (should (equal (glasspane-org--priority-string "A") "A"))
+  (should-not (glasspane-org--priority-string nil)))
+
+(ert-deftest glasspane-org-reader-pretty-headers ()
+  "Reader headers render structured: colored todo/priority spans, a
+struck-through done title, and tag chips — not the raw org line."
+  (let ((file (make-temp-file "jetpacs-pretty-test" nil ".org")))
+    (unwind-protect
+        (progn
+          (with-temp-file file
+            (insert "* TODO [#A] Fix the backup job :urgent:infra:\n"
+                    "* DONE Migrate the sync\n"))
+          (let ((json (json-serialize
+                       (jetpacs-tests--canon
+                        (apply #'jetpacs-column (glasspane-org-reader-file file)))
+                       :null-object :null :false-object :false)))
+            ;; Tags are chips, not ":urgent:infra:" text.
+            (should-not (string-search ":urgent:infra:" json))
+            (should (string-search "search.by-tag" json))
+            (should (string-search "\"urgent\"" json))
+            (should (string-search "[#A] " json))
+            (should (string-search "Fix the backup job" json))
+            ;; The done heading strikes through.
+            (should (string-search "\"strike\":true" json))))
+      (when-let ((buf (find-buffer-visiting file))) (kill-buffer buf))
+      (delete-file file))))
+
+(ert-deftest glasspane-org-reader-header-badges ()
+  "Reader headers carry deadline and clocked badges under their toggles:
+deadline in orange (red+bold once overdue), clock totals as h:mm."
+  (let ((file (make-temp-file "jetpacs-badges-test" nil ".org")))
+    (unwind-protect
+        (progn
+          (with-temp-file file
+            (insert "* TODO Pay the bill\nDEADLINE: <2001-01-05 Fri>\n"
+                    "* Logged work\n:LOGBOOK:\n"
+                    "CLOCK: [2026-07-03 Fri 10:00]--[2026-07-03 Fri 11:30] =>  1:30\n"
+                    ":END:\n"))
+          (let ((json (json-serialize
+                       (jetpacs-tests--canon
+                        (apply #'jetpacs-column (glasspane-org-reader-file file)))
+                       :null-object :null :false-object :false)))
+            (should (string-search "Deadline 2001-01-05" json))
+            (should (string-search glasspane-org-reader--overdue-color json))
+            ;; Clock badge is opt-in and off by default.
+            (should-not (string-search "clocked" json)))
+          (let* ((glasspane-org-reader-show-clocked t)
+                 (json (json-serialize
+                        (jetpacs-tests--canon
+                         (apply #'jetpacs-column (glasspane-org-reader-file file)))
+                        :null-object :null :false-object :false)))
+            (should (string-search "1:30 clocked" json)))
+          (let* ((glasspane-org-reader-show-deadline nil)
+                 (json (json-serialize
+                        (jetpacs-tests--canon
+                         (apply #'jetpacs-column (glasspane-org-reader-file file)))
+                        :null-object :null :false-object :false)))
+            (should-not (string-search "Deadline 2001-01-05" json))))
+      (when-let ((buf (find-buffer-visiting file))) (kill-buffer buf))
+      (delete-file file))))
+
+(ert-deftest glasspane-org-reader-inline-props-switch ()
+  "Binding `glasspane-org-reader-inline-props' off (the detail view)
+drops the inline PROPERTIES drawers from reader output."
+  (let ((file (make-temp-file "jetpacs-props-test" nil ".org")))
+    (unwind-protect
+        (progn
+          (with-temp-file file
+            (insert "* Top\n** Child\n:PROPERTIES:\n:KIND: demo\n:END:\n"))
+          (let ((props-p (lambda (n)
+                           (and (equal (alist-get 't n) "collapsible")
+                                (equal (alist-get 'text (alist-get 'header n))
+                                       "PROPERTIES")))))
+            (should (jetpacs-tests--find-node
+                     (glasspane-org-reader-subtree file 1 t) props-p))
+            (let ((glasspane-org-reader-inline-props nil))
+              (should-not (jetpacs-tests--find-node
+                           (glasspane-org-reader-subtree file 1 t) props-p)))))
+      (when-let ((buf (find-buffer-visiting file))) (kill-buffer buf))
+      (delete-file file))))
+
 (ert-deftest glasspane-org-lowercase-drawer-and-clock ()
   "Lowercase :logbook:/:end:/clock: parse structurally and render folded."
   ;; Structured logbook parsing (detail view path).
@@ -253,7 +372,7 @@ vocabulary `jetpacs-lint' checks."
     (let* ((toolbar (alist-get 'toolbar (jetpacs-render-to-json ed)))
            (items (append toolbar nil)))
       (should (vectorp toolbar))
-      (should (= 17 (length items)))
+      (should (= 18 (length items)))
       ;; The long-press secondaries (progress cookie, timestamp) survive.
       (should (= 2 (cl-count-if (lambda (item) (assq 'long_press item)) items)))
       ;; The src menu keeps its free-form ${input:Language} escape.

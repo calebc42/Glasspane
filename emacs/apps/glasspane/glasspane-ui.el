@@ -283,6 +283,12 @@ App layers (notes backlinks, SRS flashcards) contribute detail-view
 sections here; each returns a node list or nil.  An erroring function
 costs its own section, never the body.")
 
+(defvar glasspane-ui-detail-toolbar-functions nil
+  "Abnormal hook: functions from a detail REF to floating-toolbar items.
+App layers contribute `jetpacs-nav-item' chips after the built-in
+Refile/Archive pair; each returns an item list or nil.  An erroring
+function costs its own chips, never the toolbar.")
+
 (defun glasspane-ui--at-ref (args fn &optional save)
   "Resolve ARGS to its heading and call FN with point there.
 With SAVE non-nil, save the buffer afterwards (guarded against
@@ -307,7 +313,11 @@ error UX are app policy and stay here."
           (when save
             (let ((glasspane-org--inhibit-save-refresh t)
                   (save-silently t))
-              (save-buffer))))
+              (save-buffer))
+            ;; Read-after-write: vulpea's autosync lags the save on an
+            ;; idle timer, and the push right after this would render
+            ;; the stale row (tasks view todo/priority).
+            (glasspane-org--vulpea-refresh-file)))
         (jetpacs-org-cache-invalidate 'glasspane)
         t)
     (error

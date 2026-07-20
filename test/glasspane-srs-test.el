@@ -235,22 +235,20 @@ the heading current (its prompts bridge to phone dialogs upstream)."
       (when-let ((buf (find-buffer-visiting file))) (kill-buffer buf))
       (delete-file file))))
 
-(ert-deftest glasspane-srs-detail-section-and-hook-seam ()
-  "The detail splice hook carries both layers: the SRS section appears
-through `glasspane-ui-detail-nodes-functions', and an erroring
-contributor costs only itself."
+(ert-deftest glasspane-srs-detail-toolbar-and-hook-seam ()
+  "The detail toolbar hook carries the SRS chip through
+`glasspane-ui-detail-toolbar-functions', and an erroring contributor
+costs only its own chips."
   (jetpacs-tests--with-fake-org-srs
-    (cl-letf (((symbol-function 'glasspane-ui--detail-body)
-               (lambda (_ref) (jetpacs-lazy-column (jetpacs-text "The body" 'body)))))
-      (let* ((glasspane-ui-detail-nodes-functions
-              (list (lambda (_ref) (error "broken contributor"))
-                    #'glasspane-srs-detail-nodes))
-             (json (json-serialize
-                    (jetpacs-tests--canon
-                     (glasspane-ui--detail-body-with-notes '((id . "x"))))
-                    :null-object :null :false-object :false)))
-        (should (string-search "The body" json))
-        (should (string-search "Make flashcard" json))
-        (should (string-search "srs.item.create" json))))))
+    (let* ((glasspane-ui-detail-toolbar-functions
+            (list (lambda (_ref) (error "broken contributor"))
+                  #'glasspane-srs-detail-toolbar))
+           (json (json-serialize
+                  (jetpacs-tests--canon
+                   (apply #'jetpacs-column
+                          (glasspane-ui--detail-toolbar-extras '((id . "x")))))
+                  :null-object :null :false-object :false)))
+      (should (string-search "Flashcard" json))
+      (should (string-search "srs.item.create" json)))))
 
 (provide 'glasspane-srs-test)

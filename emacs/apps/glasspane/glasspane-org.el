@@ -20,6 +20,17 @@
 Bound around our own programmatic saves (heading edits, file saves) so an
 explicit dashboard push isn't doubled by the save-hook firing on top.")
 
+(declare-function vulpea-db-update-file "vulpea-db-extract")
+
+(defun glasspane-org--vulpea-refresh-file (&optional buffer)
+  "Synchronously re-index BUFFER's file in vulpea's db, when vulpea is up.
+Vulpea's autosync applies saves on a short batch/idle timer, so a
+mutation that immediately re-renders (todo swipe → push) would read
+the stale row back out of the index.  No-op without vulpea."
+  (when (fboundp 'vulpea-db-update-file)
+    (when-let ((f (buffer-file-name (or buffer (current-buffer)))))
+      (ignore-errors (vulpea-db-update-file f)))))
+
 (defun glasspane-org--save-and-invalidate (&optional buffer)
   "Synchronously save BUFFER (default: current buffer); drop the org memo.
 The shared tail of every mutation outside `glasspane-ui--at-ref' —
@@ -29,7 +40,8 @@ suppressed so the caller's explicit repush isn't doubled."
   (with-current-buffer (or buffer (current-buffer))
     (let ((glasspane-org--inhibit-save-refresh t)
           (save-silently t))
-      (save-buffer)))
+      (save-buffer))
+    (glasspane-org--vulpea-refresh-file))
   (jetpacs-org-cache-invalidate 'glasspane))
 
 ;; The dashboard pushes every view on every action (so navigation stays
@@ -130,6 +142,17 @@ Returns a list of alists representing agenda items.  Memoised; see
         (kill-buffer buf)))
     (nreverse items)))
 
+(defun glasspane-org--priority-string (p)
+  "Normalize priority P to its display letter, or nil.
+Vulpea stores org-element's raw :priority — the char code (65 for A) —
+and SQLite may hand it back as that integer or its decimal string;
+org-map-entries paths already carry the letter."
+  (cond ((null p) nil)
+        ((integerp p) (char-to-string p))
+        ((and (stringp p) (string-match-p "\\`[0-9]+\\'" p))
+         (char-to-string (string-to-number p)))
+        ((stringp p) p)))
+
 (defun glasspane-org--vulpea-note-to-item (note)
   "Convert a `vulpea-note' to a Glasspane item alist."
   (let ((id (vulpea-note-id note))
@@ -138,7 +161,7 @@ Returns a list of alists representing agenda items.  Memoised; see
         (pos (vulpea-note-pos note)))
     `((headline . ,title)
       (todo . ,(vulpea-note-todo note))
-      (priority . ,(vulpea-note-priority note))
+      (priority . ,(glasspane-org--priority-string (vulpea-note-priority note)))
       (tags . ,(vconcat (vulpea-note-tags note)))
       (scheduled . ,(vulpea-note-scheduled note))
       (deadline  . ,(vulpea-note-deadline note))
