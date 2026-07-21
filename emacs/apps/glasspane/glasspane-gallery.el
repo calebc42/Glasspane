@@ -25,36 +25,6 @@
 (defvar glasspane-gallery--level 0.5
   "The gauge value (0.0-1.0) the slider last set.")
 
-;; ─── Canvas gauge (geometry computed here, drawn by the canvas node) ─────────
-
-(defun glasspane-gallery--arc-points (cx cy r a0 a1 n)
-  "N+1 points along the arc A0→A1 degrees, centre (CX CY), radius R.
-Screen y grows downward, so a top semicircle spans 180°→0°."
-  (cl-loop for i from 0 to n
-           for a = (+ a0 (* (- a1 a0) (/ (float i) n)))
-           for rad = (degrees-to-radians a)
-           collect (list (+ cx (* r (cos rad))) (- cy (* r (sin rad))))))
-
-(defun glasspane-gallery--gauge (level)
-  "A semicircular canvas gauge filled to LEVEL (0.0-1.0)."
-  (let* ((w 240) (h 132) (cx 120) (cy 116) (r 95)
-         (end (- 180 (* 180 (max 0.0 (min 1.0 level)))))
-         (na (degrees-to-radians end))
-         (nx (+ cx (* r 0.9 (cos na))))
-         (ny (- cy (* r 0.9 (sin na)))))
-    (jetpacs-canvas
-     w h
-     (list (jetpacs-draw-path (glasspane-gallery--arc-points cx cy r 180 0 44)
-                           :color "#8888aa" :stroke 12)
-           (jetpacs-draw-path (glasspane-gallery--arc-points cx cy r 180 end 44)
-                           :color "#00A676" :stroke 12)
-           (jetpacs-draw-line cx cy nx ny :color "#E64980" :stroke 3)
-           (jetpacs-draw-circle cx cy 7 :fill t :color "#E64980")
-           (jetpacs-draw-text cx 74 (format "%d%%" (round (* 100 level)))
-                           :align "center" :size 28 :color "primary")))))
-
-;; ─── Body ────────────────────────────────────────────────────────────────────
-
 (defun glasspane-gallery--kind-chips ()
   "A chip rail selecting `glasspane-gallery--kind'."
   (apply #'jetpacs-flow-row
@@ -81,7 +51,7 @@ Screen y grows downward, so a top semicircle spans 180°→0°."
    (jetpacs-section-header "Slider → live canvas gauge")
    (jetpacs-slider "gallery.level" (jetpacs-action "demo.gallery.level")
                 :value glasspane-gallery--level :min 0.0 :max 1.0)
-   (glasspane-gallery--gauge glasspane-gallery--level)
+   (jetpacs-gauge glasspane-gallery--level)
    (jetpacs-divider)
    (jetpacs-section-header "Sizing · border · spacing · align")
    (jetpacs-row

@@ -22,19 +22,9 @@
 
 (defun glasspane-ui--search-builder-section (key label summary widget)
   "One collapsible filter section of the query builder.
-KEY names the fold-state id; LABEL is the always-visible section
-name.  SUMMARY, when non-nil, is the active filter rendered into the
-header so a folded section still shows what it contributes.  WIDGET
-is the section's control."
-  (jetpacs-collapsible
-   (concat "search-sec-" key)
-   (if summary
-       (jetpacs-rich-text (list (jetpacs-span (concat label ": ") :bold t)
-                             (jetpacs-span summary))
-                       :style 'body)
-     (jetpacs-text label 'body))
-   (list widget)
-   :collapsed t))
+KEY names the fold-state id under the search prefix; the rest is core's
+`jetpacs-filter-section'."
+  (jetpacs-filter-section (concat "search-sec-" key) label summary widget))
 
 (defun glasspane-ui--search-builder ()
   "The query-builder card for the Search view.

@@ -12,6 +12,6 @@
   (dolist (glasspane-gallery--kind '("line" "bar" "area" "sparkline"))
     (should-not (jetpacs-lint-spec (glasspane-gallery--body))))
   (dolist (lvl '(0.0 0.5 1.0))
-    (should-not (jetpacs-lint-spec (glasspane-gallery--gauge lvl)))))
+    (should-not (jetpacs-lint-spec (jetpacs-gauge lvl)))))
 
 (provide 'glasspane-gallery-test)

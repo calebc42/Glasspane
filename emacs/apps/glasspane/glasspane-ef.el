@@ -33,6 +33,7 @@
 
 (require 'cl-lib)
 (require 'jetpacs-widgets)
+(require 'jetpacs-theme-picker)
 (require 'jetpacs-shell)
 (require 'jetpacs-surfaces)
 (require 'jetpacs-settings)
@@ -95,69 +96,21 @@ API), so this needs no name-guessing."
                      (ef-themes-get-color-value key :with-overrides)))))
       (and (stringp value) value))))
 
-;; ─── Swatches ────────────────────────────────────────────────────────────────
-
-(defun glasspane-ef--swatch (hex &optional size)
-  "A round color chip of HEX at SIZE dp (default 22), or nil when HEX is nil."
-  (when hex
-    (jetpacs-surface nil :color hex :shape "circle"
-                     :width (or size 22) :height (or size 22))))
-
-(defconst glasspane-ef--strip-keys
-  '(bg-main fg-main accent-0 accent-1 accent-2 accent-3 err info)
-  "Palette roles shown in the current theme's swatch strip.")
-
-(defun glasspane-ef--strip ()
-  "The CURRENT theme's swatch strip: one chip per `glasspane-ef--strip-keys'.
-Reads the live palette (no theme arg), which resolves reliably."
-  (delq nil (mapcar (lambda (key)
-                      (glasspane-ef--swatch (glasspane-ef--color key)))
-                    glasspane-ef--strip-keys)))
-
-(defun glasspane-ef--preview (theme)
-  "Per-theme swatches (background / foreground / accent) for THEME's list row.
-Reading a NON-current theme's palette needs `modus-themes-activate' — the modus
-5.0 machinery ef-themes 2.0+ builds on; when it is unavailable we return nil so
-the list shows uniformly clean names."
-  (when (fboundp 'modus-themes-activate)
-    (delq nil (mapcar (lambda (key)
-                        (glasspane-ef--swatch (glasspane-ef--color key theme) 18))
-                      '(bg-main fg-main accent-0)))))
+;; ─── View sections (the shared scaffold, instantiated for ef) ────────────────
 
 (defun glasspane-ef--display-name (theme)
   "A human-friendly label for THEME: drop the `ef-' prefix, then title-case,
 so `ef-melissa-dark' reads as \"Melissa Dark\"."
-  (capitalize
-   (replace-regexp-in-string
-    "-" " " (string-remove-prefix "ef-" (symbol-name theme)))))
-
-;; ─── View sections ───────────────────────────────────────────────────────────
-
-(defun glasspane-ef--mirror-note ()
-  "Companion-mirror status, when the running core exposes `jetpacs-theme-mode'.
-A live badge under mirror mode, or a one-tap switch into it otherwise."
-  (when (boundp 'jetpacs-theme-mode)
-    (if (eq jetpacs-theme-mode 'emacs)
-        (jetpacs-row (jetpacs-icon "smartphone" :size 16)
-                     (jetpacs-text "Mirroring to the companion" 'caption))
-      (jetpacs-chip "Mirror on phone" :icon "smartphone"
-                    :on-tap (jetpacs-action "ef.mirror" :when-offline "drop")))))
+  (jetpacs-theme-picker-display-name "ef-" theme))
 
 (defun glasspane-ef--current-card (current)
   "The header card: the active theme's name, polarity, palette, mirror status."
-  (jetpacs-card
-   (list (apply #'jetpacs-column
-                (delq nil
-                      (list (jetpacs-text (if current (symbol-name current)
-                                            "No ef theme active")
-                                          'title)
-                            (when current
-                              (jetpacs-text (concat (if (glasspane-ef--dark-p current)
-                                                        "Dark" "Light")
-                                                    " · " (symbol-name current))
-                                            'caption))
-                            (when current (apply #'jetpacs-row (glasspane-ef--strip)))
-                            (when current (glasspane-ef--mirror-note))))))))
+  (jetpacs-theme-picker-current-card current
+                                     :display-fn #'symbol-name
+                                     :dark-p-fn #'glasspane-ef--dark-p
+                                     :color-fn #'glasspane-ef--color
+                                     :mirror-action "ef.mirror"
+                                     :none-label "No ef theme active"))
 
 (defun glasspane-ef--actions-row ()
   "The surprise-me loaders ef-themes is known for."
@@ -169,38 +122,13 @@ A live badge under mirror mode, or a one-tap switch into it otherwise."
    (jetpacs-button "Random light" (jetpacs-action "ef.random-light" :when-offline "drop")
                    :icon "light_mode" :variant "tonal")))
 
-(defun glasspane-ef--theme-card (theme current)
-  "A single-line row for THEME: name, preview swatches, and a marker; a tap
-loads it.  CURRENT (the active theme) is checked and not re-loadable.  The
-swatches are spread as direct row children — a nested `row' fills the width
-and would starve the weighted name (the companion renders every row
-`fillMaxWidth'); polarity is omitted, the cards are grouped under Light/Dark."
-  (let ((activep (eq theme current)))
-    (jetpacs-card
-     (list (apply #'jetpacs-row
-                  (append
-                   (list (jetpacs-box
-                          (list (jetpacs-text (glasspane-ef--display-name theme)
-                                              'label))
-                          :weight 1))
-                   (glasspane-ef--preview theme)
-                   (list (if activep
-                             (jetpacs-icon "check_circle" :color "primary")
-                           (jetpacs-icon "chevron_right"))))))
-     :on-tap (unless activep
-               (jetpacs-action "ef.load"
-                               :args `((theme . ,(symbol-name theme)))
-                               :when-offline "drop")))))
-
 (defun glasspane-ef--themes-section (current)
   "The theme picker: cards grouped Light then Dark."
-  (let* ((themes (glasspane-ef--themes))
-         (light (seq-remove #'glasspane-ef--dark-p themes))
-         (dark (seq-filter #'glasspane-ef--dark-p themes))
-         (card (lambda (theme) (glasspane-ef--theme-card theme current))))
-    (append
-     (when light (cons (jetpacs-section-header "Light") (mapcar card light)))
-     (when dark (cons (jetpacs-section-header "Dark") (mapcar card dark))))))
+  (jetpacs-theme-picker-themes-section (glasspane-ef--themes) current
+                                       :dark-p-fn #'glasspane-ef--dark-p
+                                       :display-fn #'glasspane-ef--display-name
+                                       :color-fn #'glasspane-ef--color
+                                       :load-action "ef.load"))
 
 (defconst glasspane-ef--options
   '((ef-themes-bold-constructs    . "Bold keywords")
@@ -230,18 +158,6 @@ type); the paired `jetpacs-settings-watch-toggle' still applies each."
                         (jetpacs-text (concat label " — not available") 'caption))))))
            glasspane-ef--options)))
 
-(defun glasspane-ef--more-link ()
-  "A card cross-linking into the customize browser's ef-themes group."
-  (jetpacs-card
-   (list (jetpacs-row
-          (jetpacs-icon "tune")
-          (jetpacs-box (list (jetpacs-text "More options in Customize" 'label))
-                       :weight 1)
-          (jetpacs-icon "chevron_right")))
-   :on-tap (jetpacs-action "customize.show"
-                           :args '((group . "ef-themes"))
-                           :when-offline "drop")))
-
 (defun glasspane-ef--body ()
   "The screen body, assuming the ef-themes library is loaded."
   (let ((current (glasspane-ef--current)))
@@ -252,7 +168,7 @@ type); the paired `jetpacs-settings-watch-toggle' still applies each."
                         (glasspane-ef--actions-row))
                   (glasspane-ef--themes-section current)
                   (glasspane-ef--style-section)
-                  (list (glasspane-ef--more-link)))))))
+                  (list (jetpacs-theme-picker-more-link "ef-themes")))))))
 
 (defun glasspane-ef--not-installed ()
   "Placeholder shown when the ef-themes package is absent.

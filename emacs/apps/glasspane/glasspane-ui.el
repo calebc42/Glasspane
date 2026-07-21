@@ -585,36 +585,23 @@ Reset when a different file opens.")
       (jetpacs-shell-push nil :switch-to "edit"))))
 
 ;; ─── Auto-refresh ────────────────────────────────────────────────────────────
+;; The debounce, the connected/in-action guards, and the idle push live
+;; in core (`jetpacs-shell-save-refresh-*'); this app supplies only what
+;; counts as relevant — an org agenda file, saved outside the app's own
+;; programmatic writes (`glasspane-org--inhibit-save-refresh') — and its
+;; cache invalidation.
 
-(defvar glasspane-ui--save-refresh-timer nil)
-
-(defcustom glasspane-ui-save-refresh-delay 2
-  "Idle seconds after saving an agenda file before re-pushing the dashboard.
-Debounces bursts of saves (e.g. `org-save-all-org-buffers') into one push."
-  :type 'integer :group 'jetpacs)
-
-(defun glasspane-ui--after-save-refresh ()
-  "Schedule a dashboard refresh if an org agenda file was just saved.
-No-op for saves Jetpacs itself performs — anything inside an action
-handler (see `jetpacs-in-action-p') pushes explicitly, and other
-programmatic saves bind `glasspane-org--inhibit-save-refresh' — which would
-otherwise refresh twice or loop."
-  (when (and (jetpacs-connected-p)
-             (not (bound-and-true-p glasspane-org--inhibit-save-refresh))
-             (not (jetpacs-in-action-p))
+(setq jetpacs-shell-save-refresh-predicate
+      (lambda ()
+        (and (not (bound-and-true-p glasspane-org--inhibit-save-refresh))
              buffer-file-name
              (derived-mode-p 'org-mode)
              (ignore-errors
                (member (expand-file-name buffer-file-name)
-                       (mapcar #'expand-file-name (org-agenda-files)))))
-    (jetpacs-org-cache-invalidate 'glasspane)
-    (when (timerp glasspane-ui--save-refresh-timer)
-      (cancel-timer glasspane-ui--save-refresh-timer))
-    (setq glasspane-ui--save-refresh-timer
-          (run-with-idle-timer glasspane-ui-save-refresh-delay nil
-                               #'jetpacs-shell-push))))
+                       (mapcar #'expand-file-name (org-agenda-files)))))))
 
-(add-hook 'after-save-hook #'glasspane-ui--after-save-refresh)
+(add-hook 'jetpacs-shell-save-refresh-hook
+          (lambda () (jetpacs-org-cache-invalidate 'glasspane)))
 
 (defun glasspane-ui--refresh-if-connected (&rest _)
   "Re-push the dashboard when there's a live session.

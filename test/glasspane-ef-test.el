@@ -87,7 +87,11 @@ switches, Random loaders, and the customize cross-link — and serializes."
 swatches, and the marker — are spread directly, never a nested row (which the
 companion fills to full width, starving the name to one char per line)."
   (skip-unless glasspane-ef-test--ready)
-  (let* ((card (glasspane-ef--theme-card 'ef-day nil))
+  (let* ((card (jetpacs-theme-picker-theme-card
+                'ef-day nil
+                :display-fn #'glasspane-ef--display-name
+                :color-fn #'glasspane-ef--color
+                :load-action "ef.load"))
          (row (aref (alist-get 'children card) 0))
          (kids (append (alist-get 'children row) nil)))
     (should (equal "row" (alist-get t row)))
