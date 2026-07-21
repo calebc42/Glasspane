@@ -16,100 +16,8 @@
 (require 'org)
 (require 'cl-lib)
 (require 'jetpacs-widgets)
+(require 'jetpacs-org)                  ; the outline model
 (require 'jetpacs-org-rich)
-
-(defcustom glasspane-org-reader-max-headings 400
-  "Cap on headings rendered in one reader pass, to bound very large files."
-  :type 'integer :group 'jetpacs)
-
-(defcustom glasspane-org-reader-show-deadline t
-  "Show each heading's DEADLINE date on its reader header (red when overdue)."
-  :type 'boolean :group 'jetpacs)
-
-(defcustom glasspane-org-reader-show-clocked nil
-  "Show each heading's total clocked time on its reader header.
-Off by default: computing the sums adds an `org-clock-sum' pass over
-the file on every render."
-  :type 'boolean :group 'jetpacs)
-
-;; ─── Parsing ───────────────────────────────────────────────────────────────────
-
-(defun glasspane-org-reader--record (pos next)
-  "Build a record for the heading at POS, whose body ends at NEXT.
-Returns a plist with :level :pos :line :props :body :body-start.
-:body-start is the real-buffer position of the first non-blank char
-in the body, used to map temp-buffer positions back for interactive
-elements (checkboxes)."
-  (save-excursion
-    (goto-char pos)
-    (let* ((comps (org-heading-components))
-           (level (or (nth 0 comps) 1))
-           (todo (nth 2 comps))
-           (priority (nth 3 comps))
-           (title (or (nth 4 comps) ""))
-           (tags (ignore-errors (org-get-tags pos t)))
-           (done (and todo (member todo org-done-keywords) t))
-           (deadline (and glasspane-org-reader-show-deadline
-                          (ignore-errors (org-entry-get pos "DEADLINE"))))
-           (clocked (and glasspane-org-reader-show-clocked
-                         (get-text-property pos :org-clock-minutes)))
-           (line (buffer-substring-no-properties
-                  (line-beginning-position) (line-end-position)))
-           (props (ignore-errors (org-entry-properties pos 'standard)))
-           (body-info
-            (progn
-              (goto-char pos)
-              ;; No FULL arg: skip only planning + PROPERTIES (shown as
-              ;; their own section).  LOGBOOK and other drawers stay in
-              ;; the body, where the rich renderer folds them.
-              (ignore-errors (org-end-of-meta-data))
-              (let* ((b (min (point) next))
-                     (raw (buffer-substring-no-properties b next))
-                     (trimmed (string-trim-left raw "\\(?:[ \t]*[\n\r]\\)+"))
-                     (trim-count (- (length raw) (length trimmed))))
-                (list (string-trim-right trimmed) (+ b trim-count)))))
-           (body (car body-info))
-           (body-start (cadr body-info)))
-      (list :level level :pos pos :line line :props props
-            :todo todo :priority (and priority (char-to-string priority))
-            :title title :tags tags :done done
-            :deadline deadline :clocked clocked
-            :body body :body-start body-start))))
-
-(defun glasspane-org-reader--collect (beg end include-first)
-  "Collect heading records between BEG and END.
-INCLUDE-FIRST non-nil includes the heading at BEG (used for subtrees)."
-  (let (positions records)
-    (save-excursion
-      (goto-char beg)
-      (when (and include-first (org-at-heading-p))
-        (push (line-beginning-position) positions)
-        (end-of-line))                  ; don't re-match this heading below
-      (while (re-search-forward org-heading-regexp end t)
-        (push (line-beginning-position) positions)))
-    (setq positions (nreverse positions))
-    (cl-loop for cell on positions
-             for pos = (car cell)
-             for next = (or (cadr cell) end)
-             do (push (glasspane-org-reader--record pos next) records))
-    (nreverse records)))
-
-(defun glasspane-org-reader--build-tree (records)
-  "Nest flat RECORDS into a tree by :level. Each node gains a :children list."
-  (let* ((root (list :level 0 :children nil))
-         (stack (list root)))
-    (dolist (rec records)
-      (let ((node (append rec (list :children nil)))
-            (level (plist-get rec :level)))
-        (while (>= (plist-get (car stack) :level) level)
-          (pop stack))
-        (let ((parent (car stack)))
-          (plist-put parent :children
-                     (append (plist-get parent :children) (list node))))
-        (push node stack)))
-    (plist-get root :children)))
-
-;; ─── Rendering ──────────────────────────────────────────────────────────────────
 
 (defun glasspane-org-reader--props-node (props file pos)
   "A collapsed PROPERTIES drawer node for PROPS (an alist of KEY . VALUE)."
@@ -149,17 +57,6 @@ detail view already shows properties in its own section)."
                (jetpacs-org-rich-body body (and file (file-name-directory file))
                                         file (when body-start (1- body-start)))))
            (mapcar (lambda (c) (glasspane-org-reader--heading-node c file)) children)))))
-
-(defun glasspane-org-reader--clocked-in-p (pos)
-  "Whether the heading at POS in the current buffer is the clocked task."
-  (and (bound-and-true-p org-clock-hd-marker)
-       (marker-buffer org-clock-hd-marker)
-       (eq (marker-buffer org-clock-hd-marker) (current-buffer))
-       (save-excursion
-         (goto-char pos)
-         (= (line-beginning-position)
-            (save-excursion (goto-char org-clock-hd-marker)
-                            (line-beginning-position))))))
 
 (defun glasspane-org-reader-heading-menu (ref clocked-in)
   "The per-heading overflow menu: quick actions without the detail drill-in.
@@ -309,7 +206,7 @@ single-action on_swipe kept for older companions)."
                           (jetpacs-row
                            (jetpacs-box (list header) :weight 1)
                            (glasspane-org-reader-heading-menu
-                            ref (glasspane-org-reader--clocked-in-p pos)))
+                            ref (jetpacs-org-clocked-in-p pos)))
                         header)
                       (glasspane-org-reader--content-nodes n file)
                       :on-long-tap (when ref
@@ -321,23 +218,17 @@ single-action on_swipe kept for older companions)."
 
 ;; ─── Entry points ───────────────────────────────────────────────────────────────
 
-(defun glasspane-org-reader--cap (records)
-  "Truncate RECORDS to `glasspane-org-reader-max-headings'."
-  (if (> (length records) glasspane-org-reader-max-headings)
-      (cl-subseq records 0 glasspane-org-reader-max-headings)
-    records))
-
 (defun glasspane-org-reader-file (file)
   "Render the whole org FILE to a list of foldable widget nodes.
 Content before the first heading is not shown."
   (when (and file (file-readable-p file))
     (with-current-buffer (find-file-noselect file)
       (org-with-wide-buffer
-       (when glasspane-org-reader-show-clocked
+       (when jetpacs-org-outline-show-clocked
          (ignore-errors (org-clock-sum)))
-       (let* ((records (glasspane-org-reader--cap
-                        (glasspane-org-reader--collect (point-min) (point-max) nil)))
-              (tree (glasspane-org-reader--build-tree records)))
+       (let* ((records (jetpacs-org-outline-cap
+                        (jetpacs-org-outline-collect (point-min) (point-max) nil)))
+              (tree (jetpacs-org-outline-tree records)))
          (mapcar (lambda (n) (glasspane-org-reader--heading-node n file)) tree))))))
 
 (defun glasspane-org-reader-subtree (file pos &optional skip-props)
@@ -349,15 +240,15 @@ When SKIP-PROPS is non-nil, the top-level PROPERTIES drawer is omitted."
   (when (and file (file-readable-p file))
     (with-current-buffer (find-file-noselect file)
       (org-with-wide-buffer
-       (when glasspane-org-reader-show-clocked
+       (when jetpacs-org-outline-show-clocked
          (ignore-errors (org-clock-sum)))
        (goto-char (min pos (point-max)))
        (unless (org-at-heading-p) (ignore-errors (org-back-to-heading t)))
        (let* ((beg (point))
               (end (save-excursion (org-end-of-subtree t t)))
-              (records (glasspane-org-reader--cap
-                        (glasspane-org-reader--collect beg end t)))
-              (tree (glasspane-org-reader--build-tree records))
+              (records (jetpacs-org-outline-cap
+                        (jetpacs-org-outline-collect beg end t)))
+              (tree (jetpacs-org-outline-tree records))
               (root (car tree)))
          (when root
            (glasspane-org-reader--content-nodes root file skip-props)))))))
@@ -368,8 +259,8 @@ Returns a single `jetpacs-reorderable-list' node for refile mode."
   (when (and file (file-readable-p file))
     (with-current-buffer (find-file-noselect file)
       (org-with-wide-buffer
-       (let* ((records (glasspane-org-reader--cap
-                        (glasspane-org-reader--collect (point-min) (point-max) nil)))
+       (let* ((records (jetpacs-org-outline-cap
+                        (jetpacs-org-outline-collect (point-min) (point-max) nil)))
               (items (mapcar (lambda (r)
                                `((label . ,(plist-get r :line))
                                  (level . ,(plist-get r :level))
@@ -385,8 +276,8 @@ Returns a single `jetpacs-reorderable-list' node for refile mode."
   (with-jetpacs-owner "glasspane"
     (jetpacs-settings-register-section
      "Reader"
-     '((glasspane-org-reader-show-deadline :label "Deadline on headings")
-       (glasspane-org-reader-show-clocked :label "Clocked time on headings")))))
+     '((jetpacs-org-outline-show-deadline :label "Deadline on headings")
+       (jetpacs-org-outline-show-clocked :label "Clocked time on headings")))))
 
 (provide 'glasspane-org-reader)
 ;;; glasspane-org-reader.el ends here

@@ -580,103 +580,6 @@ actually used in the agenda files.  Memoised; see
           (properties . ,props)
           (body . ,body))))))
 
-(defun glasspane-org--parse-template-prompts (template-string)
-  "Return the ordered field names to collect for TEMPLATE-STRING.
-Each `%^{NAME}' or `%^{NAME|default}' contributes NAME (the default is
-dropped from the label but honoured at fill time). A `%?' body position
-adds a leading \"Headline\" field. Duplicates are removed."
-  (let (prompts (start 0))
-    (while (string-match "%\\^{\\([^}]+\\)}" template-string start)
-      ;; Capture the match BEFORE `split-string' runs — it calls `string-match'
-      ;; internally and would clobber the match data, leaving `match-end' wrong
-      ;; and the loop spinning forever.
-      (let ((spec (match-string 1 template-string))
-            (end (match-end 0)))
-        (push (string-trim (car (split-string spec "|"))) prompts)
-        (setq start end)))
-    (setq prompts (nreverse prompts))
-    (delete-dups
-     (if (string-match-p "%\\?" template-string)
-         (cons "Headline" prompts)
-       prompts))))
-
-(defun glasspane-org--capture-templates ()
-  "Return list of capture templates."
-  (mapcar (lambda (tmpl)
-            (let ((key (nth 0 tmpl))
-                  (desc (nth 1 tmpl))
-                  (template-string (nth 4 tmpl)))
-              `((key . ,key)
-                (description . ,desc)
-                (prompts . ,(vconcat (glasspane-org--parse-template-prompts 
-                                      (if (stringp template-string) template-string "")))))))
-          org-capture-templates))
-
-(defun glasspane-org--fill-template (tmpl values)
-  "Fill org capture TMPL string from VALUES (NAME -> user input alist).
-`%?' becomes the Headline value; each `%^{NAME|default}' becomes the user
-value for NAME, else its default, else empty. Any *other* interactive
-escape that survives (`%^{…}' with no value, `%^t', `%^g', …) is then
-stripped, so `org-capture' can never block on a minibuffer prompt — which
-on the phone would hang behind the bridge."
-  (let ((headline (or (cdr (assoc "Headline" values)) "")))
-    ;; %? — free-form body position.
-    (setq tmpl (replace-regexp-in-string "%\\?" headline tmpl t t))
-    ;; %^{NAME|default} — scan the template's own tokens so NAME always
-    ;; matches what `glasspane-org--parse-template-prompts' produced.
-    (setq tmpl (replace-regexp-in-string
-                "%\\^{\\([^}]*\\)}"
-                (lambda (m)
-                  ;; M is the whole "%^{ … }" match; parse it directly rather
-                  ;; than via match-data (unreliable inside this callback).
-                  (let* ((spec (substring m 3 -1))
-                         (bar (string-search "|" spec))
-                         (name (string-trim (if bar (substring spec 0 bar) spec)))
-                         (default (and bar (substring spec (1+ bar))))
-                         (val (cdr (assoc name values))))
-                    (cond ((and (stringp val) (not (string-empty-p val))) val)
-                          ((stringp default) default)
-                          (t ""))))
-                tmpl t t))
-    ;; Neutralise any remaining caret (interactive) escapes; leave plain
-    ;; ones like %U %t %i %a for org to expand non-interactively.
-    (replace-regexp-in-string "%\\^.?" "" tmpl t t)))
-
-(defun glasspane-org--do-capture (template-key values &optional extra-body)
-  "Run capture for TEMPLATE-KEY with VALUES alist (NAME -> user input).
-EXTRA-BODY, when non-empty, is appended below the filled template —
-the carrier for text shared from another app via the share sheet."
-  (let ((entry (assoc template-key org-capture-templates)))
-    (when entry
-      (let* ((tmpl (nth 4 entry))
-             (filled (if (stringp tmpl)
-                         (glasspane-org--fill-template tmpl values)
-                       tmpl))
-             (filled (if (and (stringp filled)
-                              (stringp extra-body)
-                              (not (string-empty-p (string-trim extra-body))))
-                         (concat filled "\n" (string-trim extra-body))
-                       filled))
-             ;; Shallow-copy the entry, swap in the filled template, and force
-             ;; :immediate-finish so the capture buffer never waits for the
-             ;; C-c C-c a phone user can't press.
-             (new-entry (copy-sequence entry)))
-        (setcar (nthcdr 4 new-entry) filled)
-        (setcdr (nthcdr 4 new-entry)
-                (append (nthcdr 5 new-entry) '(:immediate-finish t)))
-        ;; `org-capture-entry' short-circuits template selection inside
-        ;; `org-capture', so binding it to the FILLED copy is what makes the
-        ;; pre-filled template the one that actually runs.  (Binding it to
-        ;; the original — as this code once did — re-ran the raw %^{...}
-        ;; prompts and double-asked the user through the bridge.)
-        (let ((org-capture-entry new-entry))
-          ;; Safety net: a fully pre-filled template shouldn't prompt at all,
-          ;; but if any escape slips through, never let `org-capture' block
-          ;; Emacs forever on a minibuffer the phone can't answer. `with-timeout'
-          ;; fires even while a synchronous read is waiting.
-          (with-timeout (30 (message "jetpacs: capture timed out (a prompt was left unanswered)"))
-            (org-capture)))))))
-
 (defun glasspane-org--item-hm (time)
   "Normalize an agenda item's raw `time' property to \"HH:MM\", or nil.
 The property comes straight from the agenda's time grid and looks like
@@ -848,7 +751,7 @@ ready for the companion's `reminders.set' frame."
 
 (defun glasspane-source--iso-date (ts)
   "The \"YYYY-MM-DD\" date inside org timestamp string TS, or nil.
-Mirrors the agenda's presentation helper `glasspane-ui--ts-date'; kept
+Mirrors the agenda's presentation helper `jetpacs-org-ts-date'; kept
 local so the data layer does not `require' a view module."
   (when (and (stringp ts)
              (string-match "\\([0-9]\\{4\\}-[0-9]\\{2\\}-[0-9]\\{2\\}\\)" ts))
@@ -927,100 +830,8 @@ no items (never an error)."
 (require 'org)
 (require 'cl-lib)
 (require 'jetpacs-widgets)
+(require 'jetpacs-org)                  ; the outline model
 (require 'jetpacs-org-rich)
-
-(defcustom glasspane-org-reader-max-headings 400
-  "Cap on headings rendered in one reader pass, to bound very large files."
-  :type 'integer :group 'jetpacs)
-
-(defcustom glasspane-org-reader-show-deadline t
-  "Show each heading's DEADLINE date on its reader header (red when overdue)."
-  :type 'boolean :group 'jetpacs)
-
-(defcustom glasspane-org-reader-show-clocked nil
-  "Show each heading's total clocked time on its reader header.
-Off by default: computing the sums adds an `org-clock-sum' pass over
-the file on every render."
-  :type 'boolean :group 'jetpacs)
-
-;; ─── Parsing ───────────────────────────────────────────────────────────────────
-
-(defun glasspane-org-reader--record (pos next)
-  "Build a record for the heading at POS, whose body ends at NEXT.
-Returns a plist with :level :pos :line :props :body :body-start.
-:body-start is the real-buffer position of the first non-blank char
-in the body, used to map temp-buffer positions back for interactive
-elements (checkboxes)."
-  (save-excursion
-    (goto-char pos)
-    (let* ((comps (org-heading-components))
-           (level (or (nth 0 comps) 1))
-           (todo (nth 2 comps))
-           (priority (nth 3 comps))
-           (title (or (nth 4 comps) ""))
-           (tags (ignore-errors (org-get-tags pos t)))
-           (done (and todo (member todo org-done-keywords) t))
-           (deadline (and glasspane-org-reader-show-deadline
-                          (ignore-errors (org-entry-get pos "DEADLINE"))))
-           (clocked (and glasspane-org-reader-show-clocked
-                         (get-text-property pos :org-clock-minutes)))
-           (line (buffer-substring-no-properties
-                  (line-beginning-position) (line-end-position)))
-           (props (ignore-errors (org-entry-properties pos 'standard)))
-           (body-info
-            (progn
-              (goto-char pos)
-              ;; No FULL arg: skip only planning + PROPERTIES (shown as
-              ;; their own section).  LOGBOOK and other drawers stay in
-              ;; the body, where the rich renderer folds them.
-              (ignore-errors (org-end-of-meta-data))
-              (let* ((b (min (point) next))
-                     (raw (buffer-substring-no-properties b next))
-                     (trimmed (string-trim-left raw "\\(?:[ \t]*[\n\r]\\)+"))
-                     (trim-count (- (length raw) (length trimmed))))
-                (list (string-trim-right trimmed) (+ b trim-count)))))
-           (body (car body-info))
-           (body-start (cadr body-info)))
-      (list :level level :pos pos :line line :props props
-            :todo todo :priority (and priority (char-to-string priority))
-            :title title :tags tags :done done
-            :deadline deadline :clocked clocked
-            :body body :body-start body-start))))
-
-(defun glasspane-org-reader--collect (beg end include-first)
-  "Collect heading records between BEG and END.
-INCLUDE-FIRST non-nil includes the heading at BEG (used for subtrees)."
-  (let (positions records)
-    (save-excursion
-      (goto-char beg)
-      (when (and include-first (org-at-heading-p))
-        (push (line-beginning-position) positions)
-        (end-of-line))                  ; don't re-match this heading below
-      (while (re-search-forward org-heading-regexp end t)
-        (push (line-beginning-position) positions)))
-    (setq positions (nreverse positions))
-    (cl-loop for cell on positions
-             for pos = (car cell)
-             for next = (or (cadr cell) end)
-             do (push (glasspane-org-reader--record pos next) records))
-    (nreverse records)))
-
-(defun glasspane-org-reader--build-tree (records)
-  "Nest flat RECORDS into a tree by :level. Each node gains a :children list."
-  (let* ((root (list :level 0 :children nil))
-         (stack (list root)))
-    (dolist (rec records)
-      (let ((node (append rec (list :children nil)))
-            (level (plist-get rec :level)))
-        (while (>= (plist-get (car stack) :level) level)
-          (pop stack))
-        (let ((parent (car stack)))
-          (plist-put parent :children
-                     (append (plist-get parent :children) (list node))))
-        (push node stack)))
-    (plist-get root :children)))
-
-;; ─── Rendering ──────────────────────────────────────────────────────────────────
 
 (defun glasspane-org-reader--props-node (props file pos)
   "A collapsed PROPERTIES drawer node for PROPS (an alist of KEY . VALUE)."
@@ -1060,17 +871,6 @@ detail view already shows properties in its own section)."
                (jetpacs-org-rich-body body (and file (file-name-directory file))
                                         file (when body-start (1- body-start)))))
            (mapcar (lambda (c) (glasspane-org-reader--heading-node c file)) children)))))
-
-(defun glasspane-org-reader--clocked-in-p (pos)
-  "Whether the heading at POS in the current buffer is the clocked task."
-  (and (bound-and-true-p org-clock-hd-marker)
-       (marker-buffer org-clock-hd-marker)
-       (eq (marker-buffer org-clock-hd-marker) (current-buffer))
-       (save-excursion
-         (goto-char pos)
-         (= (line-beginning-position)
-            (save-excursion (goto-char org-clock-hd-marker)
-                            (line-beginning-position))))))
 
 (defun glasspane-org-reader-heading-menu (ref clocked-in)
   "The per-heading overflow menu: quick actions without the detail drill-in.
@@ -1220,7 +1020,7 @@ single-action on_swipe kept for older companions)."
                           (jetpacs-row
                            (jetpacs-box (list header) :weight 1)
                            (glasspane-org-reader-heading-menu
-                            ref (glasspane-org-reader--clocked-in-p pos)))
+                            ref (jetpacs-org-clocked-in-p pos)))
                         header)
                       (glasspane-org-reader--content-nodes n file)
                       :on-long-tap (when ref
@@ -1232,23 +1032,17 @@ single-action on_swipe kept for older companions)."
 
 ;; ─── Entry points ───────────────────────────────────────────────────────────────
 
-(defun glasspane-org-reader--cap (records)
-  "Truncate RECORDS to `glasspane-org-reader-max-headings'."
-  (if (> (length records) glasspane-org-reader-max-headings)
-      (cl-subseq records 0 glasspane-org-reader-max-headings)
-    records))
-
 (defun glasspane-org-reader-file (file)
   "Render the whole org FILE to a list of foldable widget nodes.
 Content before the first heading is not shown."
   (when (and file (file-readable-p file))
     (with-current-buffer (find-file-noselect file)
       (org-with-wide-buffer
-       (when glasspane-org-reader-show-clocked
+       (when jetpacs-org-outline-show-clocked
          (ignore-errors (org-clock-sum)))
-       (let* ((records (glasspane-org-reader--cap
-                        (glasspane-org-reader--collect (point-min) (point-max) nil)))
-              (tree (glasspane-org-reader--build-tree records)))
+       (let* ((records (jetpacs-org-outline-cap
+                        (jetpacs-org-outline-collect (point-min) (point-max) nil)))
+              (tree (jetpacs-org-outline-tree records)))
          (mapcar (lambda (n) (glasspane-org-reader--heading-node n file)) tree))))))
 
 (defun glasspane-org-reader-subtree (file pos &optional skip-props)
@@ -1260,15 +1054,15 @@ When SKIP-PROPS is non-nil, the top-level PROPERTIES drawer is omitted."
   (when (and file (file-readable-p file))
     (with-current-buffer (find-file-noselect file)
       (org-with-wide-buffer
-       (when glasspane-org-reader-show-clocked
+       (when jetpacs-org-outline-show-clocked
          (ignore-errors (org-clock-sum)))
        (goto-char (min pos (point-max)))
        (unless (org-at-heading-p) (ignore-errors (org-back-to-heading t)))
        (let* ((beg (point))
               (end (save-excursion (org-end-of-subtree t t)))
-              (records (glasspane-org-reader--cap
-                        (glasspane-org-reader--collect beg end t)))
-              (tree (glasspane-org-reader--build-tree records))
+              (records (jetpacs-org-outline-cap
+                        (jetpacs-org-outline-collect beg end t)))
+              (tree (jetpacs-org-outline-tree records))
               (root (car tree)))
          (when root
            (glasspane-org-reader--content-nodes root file skip-props)))))))
@@ -1279,8 +1073,8 @@ Returns a single `jetpacs-reorderable-list' node for refile mode."
   (when (and file (file-readable-p file))
     (with-current-buffer (find-file-noselect file)
       (org-with-wide-buffer
-       (let* ((records (glasspane-org-reader--cap
-                        (glasspane-org-reader--collect (point-min) (point-max) nil)))
+       (let* ((records (jetpacs-org-outline-cap
+                        (jetpacs-org-outline-collect (point-min) (point-max) nil)))
               (items (mapcar (lambda (r)
                                `((label . ,(plist-get r :line))
                                  (level . ,(plist-get r :level))
@@ -1296,8 +1090,8 @@ Returns a single `jetpacs-reorderable-list' node for refile mode."
   (with-jetpacs-owner "glasspane"
     (jetpacs-settings-register-section
      "Reader"
-     '((glasspane-org-reader-show-deadline :label "Deadline on headings")
-       (glasspane-org-reader-show-clocked :label "Clocked time on headings")))))
+     '((jetpacs-org-outline-show-deadline :label "Deadline on headings")
+       (jetpacs-org-outline-show-clocked :label "Clocked time on headings")))))
 
 (provide 'glasspane-org-reader)
 ;;; glasspane-org-reader.el ends here
@@ -1679,17 +1473,6 @@ is the finished state."
             ;; Schema-driven sections: every allowlisted defcustom in
             ;; `jetpacs-settings-registry', rendered from its custom-type.
             (jetpacs-settings-sections)))))
-
-(defun glasspane-org--format-clock-time (start end)
-  (condition-case nil
-      (let ((s-date (substring start 0 10))
-            (s-time (substring start -5))
-            (e-date (substring end 0 10))
-            (e-time (substring end -5)))
-        (if (equal s-date e-date)
-            (format "%s, %s to %s" s-date s-time e-time)
-          (format "%s %s to %s %s" s-date s-time e-date e-time)))
-    (error (format "%s to %s" start end))))
 
 (defvar glasspane-ui-detail-nodes-functions nil
   "Abnormal hook: functions from a detail REF to extra section nodes.
@@ -2197,28 +1980,6 @@ Reads the memoised day extraction, so a push recomputes nothing; nil
         a
       (format-time-string "%Y-%m-%d"))))
 
-(defun glasspane-ui--shift-date (date n unit)
-  "Shift DATE (\"YYYY-MM-DD\") by N UNITs (`day', `week', or `month').
-Month arithmetic clamps the day into the target month, so Jan 31 + 1
-month is Feb 28, not an invalid date."
-  (pcase-let ((`(,y ,m ,d) (mapcar #'string-to-number (split-string date "-"))))
-    (if (eq unit 'month)
-        (let* ((total (+ (* 12 y) (1- m) n))
-               (ny (/ total 12))
-               (nm (1+ (% total 12))))
-          (format "%04d-%02d-%02d" ny nm
-                  (min d (calendar-last-day-of-month nm ny))))
-      (let ((days (* n (if (eq unit 'week) 7 1))))
-        ;; Noon avoids DST-transition off-by-one-day surprises.
-        (format-time-string "%Y-%m-%d"
-                            (time-add (encode-time 0 0 12 d m y)
-                                      (* days 86400)))))))
-
-(defun glasspane-ui--format-date (date fmt)
-  "Render DATE (\"YYYY-MM-DD\") through `format-time-string' FMT."
-  (pcase-let ((`(,y ,m ,d) (mapcar #'string-to-number (split-string date "-"))))
-    (format-time-string fmt (encode-time 0 0 12 d m y))))
-
 (defun glasspane-ui--agenda-nav-row (mode anchor)
   "The ‹ [range label] [today] › navigation row for the agenda header."
   (let* ((today (format-time-string "%Y-%m-%d"))
@@ -2226,12 +1987,12 @@ month is Feb 28, not an invalid date."
                      ("month" (equal (substring anchor 0 7) (substring today 0 7)))
                      (_ (equal anchor today))))
          (label (pcase mode
-                  ("month" (glasspane-ui--format-date anchor "%B %Y"))
+                  ("month" (jetpacs-date-format anchor "%B %Y"))
                   ("week" (concat "Week of "
-                                  (glasspane-ui--format-date anchor "%b %d")))
+                                  (jetpacs-date-format anchor "%b %d")))
                   (_ (if at-today
-                         (concat "Today · " (glasspane-ui--format-date anchor "%a, %b %d"))
-                       (glasspane-ui--format-date anchor "%a, %b %d"))))))
+                         (concat "Today · " (jetpacs-date-format anchor "%a, %b %d"))
+                       (jetpacs-date-format anchor "%a, %b %d"))))))
     (apply #'jetpacs-row
            (delq nil
                  (list
@@ -2274,7 +2035,7 @@ month is Feb 28, not an invalid date."
     (let* ((month (string-to-number (match-string 2 ts)))
            (day   (string-to-number (match-string 3 ts)))
            (mon   (jetpacs-month-abbrev month))
-           (time  (glasspane-ui--ts-time ts)))
+           (time  (jetpacs-org-ts-time ts)))
       (if time (format "%s %d %s" mon day time)
         (format "%s %d" mon day)))))
 
@@ -2544,25 +2305,6 @@ next push. No :id — a background re-push must not yank the user's tab."
                          :title "No tasks"
                          :caption "Nothing matches this filter.")))))
 
-(defun glasspane-ui--ts-date (ts)
-  "Return the YYYY-MM-DD date inside org timestamp string TS, or nil."
-  (when (and (stringp ts)
-             (string-match "\\([0-9]\\{4\\}-[0-9]\\{2\\}-[0-9]\\{2\\}\\)" ts))
-    (match-string 1 ts)))
-
-(defun glasspane-ui--ts-time (ts)
-  "Return the HH:MM time inside org timestamp string TS, or nil."
-  (when (and (stringp ts)
-             (string-match "\\([0-9]\\{1,2\\}:[0-9]\\{2\\}\\)" ts))
-    (match-string 1 ts)))
-
-(defun glasspane-ui--ts-repeater (ts)
-  "Return the repeater cookie (e.g. \"+1w\", \".+2d\") inside TS, or nil.
-The one part of a timestamp the date-stamp chip can't display."
-  (when (and (stringp ts)
-             (string-match "\\([.+]?\\+[0-9]+[hdwmy]\\)" ts))
-    (match-string 1 ts)))
-
 (with-jetpacs-owner "glasspane"
   (jetpacs-defaction "tasks.filter"
     (lambda (args _)
@@ -2656,7 +2398,7 @@ with the new states.  Returns non-nil when persisting succeeded."
         (when (eq unit 'month)
           (setq anchor (concat (substring anchor 0 7) "-01")))
         (jetpacs-ui-state-put "agenda-anchor"
-                           (glasspane-ui--shift-date anchor dir unit))
+                           (jetpacs-date-shift anchor dir unit))
         (jetpacs-shell-push)))))
 
 (defun glasspane-ui--org-editor-body (file)
@@ -2791,7 +2533,7 @@ the tile picker."
 
 (defun glasspane-ui-show-capture-dialog ()
   (condition-case err
-      (let* ((templates (glasspane-org--capture-templates))
+      (let* ((templates (jetpacs-org-capture-templates))
              (template-buttons
               (mapcar (lambda (t-info)
                         (jetpacs-button
@@ -2839,7 +2581,7 @@ keeps a previous capture's device-side field state from resurfacing."
                        glasspane-ui--shared-subject))
   (condition-case err
       (let* ((form (glasspane-capture--form))
-             (templates (glasspane-org--capture-templates))
+             (templates (jetpacs-org-capture-templates))
              (tmpl (cl-find-if
                     (lambda (t-info) (equal (alist-get 'key t-info) template-key))
                     templates))
@@ -2910,7 +2652,7 @@ appears on the next replay."
     (lambda (args _)
       (let ((key (alist-get 'key args)))
         (condition-case err
-            (let* ((templates (glasspane-org--capture-templates))
+            (let* ((templates (jetpacs-org-capture-templates))
                    (tmpl (cl-find-if
                           (lambda (t-info) (equal (alist-get 'key t-info) key))
                           templates))
@@ -2923,7 +2665,7 @@ appears on the next replay."
                               (let ((v (jetpacs-form-value form p)))
                                 (cons p (if (stringp v) v ""))))
                             prompts)))
-              (glasspane-org--do-capture key values glasspane-ui--shared-text)
+              (jetpacs-org-capture-run key values glasspane-ui--shared-text)
               (setq glasspane-ui--shared-text nil
                     glasspane-ui--shared-subject nil)
               (jetpacs-org-cache-invalidate 'glasspane)
@@ -3402,49 +3144,6 @@ breaks links); every other value is an inline input whose submit runs
                                :on-submit action))))
       :weight 3))))
 
-(defun glasspane-org--parse-logbook (text)
-  ;; Keywords may be written lowercase in org files ("clock:" is as valid
-  ;; as "CLOCK:"), so match case-insensitively — explicitly, like
-  ;; org-element does, never relying on the ambient `case-fold-search'.
-  (let ((case-fold-search t)
-        (lines (split-string text "\n" t "[ \t]+"))
-        entries current-entry)
-    (dolist (line lines)
-      (cond
-       ((string-match "^CLOCK: \\[\\(.*?\\)\\]--\\[\\(.*?\\)\\] =>[ \t]+\\(.*\\)$" line)
-        (when current-entry (push current-entry entries))
-        (setq current-entry (list :type 'clock :start (match-string 1 line)
-                                  :end (match-string 2 line)
-                                  :duration (match-string 3 line))))
-       ((string-match "^CLOCK: \\[\\(.*?\\)\\]$" line)
-        (when current-entry (push current-entry entries))
-        (setq current-entry (list :type 'clock :start (match-string 1 line) :active t)))
-       ((string-match "^- Note taken on \\(\\[.*?\\]\\) \\\\\\\\$" line)
-        (when current-entry (push current-entry entries))
-        (setq current-entry (list :type 'note :timestamp (match-string 1 line) :content "")))
-       ((string-match "^- State \"\\(.*?\\)\"[ \t]+from \"\\(.*?\\)\"[ \t]+\\(\\[.*?\\]\\)\\(\\(?: \\\\\\\\\\)?\\)$" line)
-        (when current-entry (push current-entry entries))
-        (setq current-entry (list :type 'state :to (match-string 1 line) :from (match-string 2 line)
-                                  :timestamp (match-string 3 line)
-                                  :has-note (not (string-empty-p (match-string 4 line)))
-                                  :content "")))
-       ((string-match "^- State \"\\(.*?\\)\"[ \t]+\\(\\[.*?\\]\\)\\(\\(?: \\\\\\\\\\)?\\)$" line)
-        (when current-entry (push current-entry entries))
-        (setq current-entry (list :type 'state :to (match-string 1 line)
-                                  :timestamp (match-string 2 line)
-                                  :has-note (not (string-empty-p (match-string 3 line)))
-                                  :content "")))
-       (t
-        ;; Continuation line
-        (when current-entry
-          (let ((content (plist-get current-entry :content)))
-            (setq current-entry (plist-put current-entry :content
-                                           (if (string-empty-p content)
-                                               line
-                                             (concat content "\n" line)))))))))
-    (when current-entry (push current-entry entries))
-    (nreverse entries)))
-
 (defun glasspane-ui--render-logbook-entry (entry)
   (let ((type (plist-get entry :type)))
     (cl-case type
@@ -3456,7 +3155,7 @@ breaks links); every other value is an inline input whose submit runs
           (jetpacs-column
            (jetpacs-text (if (plist-get entry :active)
                           (format "Started %s" (plist-get entry :start))
-                        (glasspane-org--format-clock-time (plist-get entry :start) (plist-get entry :end)))
+                        (jetpacs-org-format-clock-time (plist-get entry :start) (plist-get entry :end)))
                       'body t nil nil nil [0 0 4 0])
            (jetpacs-text (plist-get entry :duration) 'caption))))
         :padding [8 16 8 16]))
@@ -3484,20 +3183,6 @@ breaks links); every other value is an inline input whose submit runs
                         (plist-get entry :timestamp))
                       'caption))))
         :padding [8 16 8 16])))))
-
-(defun glasspane-ui--logbook-entries (pos)
-  "Return structured logbook entries for heading at POS, or nil.
-Drawer delimiters are matched case-insensitively (\":logbook:\" is
-valid org), explicitly rather than via ambient `case-fold-search'."
-  (save-excursion
-    (goto-char pos)
-    (let ((case-fold-search t)
-          (end (save-excursion (org-end-of-meta-data t) (point))))
-      (goto-char pos)
-      (when (re-search-forward "^[ \t]*:LOGBOOK:[ \t]*$" end t)
-        (let ((start (match-end 0)))
-          (when (re-search-forward "^[ \t]*:END:[ \t]*$" end t)
-            (glasspane-org--parse-logbook (buffer-substring-no-properties start (match-beginning 0)))))))))
 
 (defun glasspane-ui--properties-section (props ref pos)
   "The Properties collapsible: KEY → VALUE rows plus an + Add button.
@@ -3608,8 +3293,8 @@ container would break Compose) and wrap otherwise."
                                                   :args `((ref . ,ref))
                                                   :when-offline "queue"
                                                   :dedupe (format "save-detail/%s" pos)))))
-          (let ((sdate (glasspane-ui--ts-date scheduled))
-                (ddate (glasspane-ui--ts-date deadline))
+          (let ((sdate (jetpacs-org-ts-date scheduled))
+                (ddate (jetpacs-org-ts-date deadline))
                 (entry-props (ignore-errors
                                (with-current-buffer buf
                                  (org-with-wide-buffer
@@ -3618,7 +3303,7 @@ container would break Compose) and wrap otherwise."
                 (logbook-entries (ignore-errors
                                    (with-current-buffer buf
                                      (org-with-wide-buffer
-                                      (glasspane-ui--logbook-entries pos))))))
+                                      (jetpacs-org-logbook-entries pos))))))
             (apply #'jetpacs-lazy-column
                    (delq nil
                          (append
@@ -3667,7 +3352,7 @@ container would break Compose) and wrap otherwise."
                              (jetpacs-row
                               (if sdate
                                   (jetpacs-date-stamp :date sdate
-                                                   :time (glasspane-ui--ts-time scheduled))
+                                                   :time (jetpacs-org-ts-time scheduled))
                                 (jetpacs-spacer :width 0))
                               (jetpacs-box
                                (list
@@ -3677,7 +3362,7 @@ container would break Compose) and wrap otherwise."
                                               (jetpacs-text "Scheduled" 'label)
                                               (unless sdate
                                                 (jetpacs-text "Not scheduled" 'caption))
-                                              (when-let ((rep (glasspane-ui--ts-repeater scheduled)))
+                                              (when-let ((rep (jetpacs-org-ts-repeater scheduled)))
                                                 (jetpacs-text (concat "Repeats " rep) 'caption))
                                               (jetpacs-flow-row
                                                (jetpacs-date-button "Set date"
@@ -3685,7 +3370,7 @@ container would break Compose) and wrap otherwise."
                                                                  :value sdate)
                                                (jetpacs-time-button "Set time"
                                                                  (jetpacs-action "heading.schedule-time" :args ref)
-                                                                 :value (glasspane-ui--ts-time scheduled))
+                                                                 :value (jetpacs-org-ts-time scheduled))
                                                (funcall sched-button "Today" "+0d")
                                                (funcall sched-button "+1d" "+1d")
                                                (funcall sched-button "+1w" "+1w")
@@ -3698,7 +3383,7 @@ container would break Compose) and wrap otherwise."
                              (jetpacs-row
                               (if ddate
                                   (jetpacs-date-stamp :date ddate
-                                                   :time (glasspane-ui--ts-time deadline))
+                                                   :time (jetpacs-org-ts-time deadline))
                                 (jetpacs-spacer :width 0))
                               (jetpacs-box
                                (list
@@ -3708,7 +3393,7 @@ container would break Compose) and wrap otherwise."
                                               (jetpacs-text "Deadline" 'label)
                                               (unless ddate
                                                 (jetpacs-text "No deadline" 'caption))
-                                              (when-let ((rep (glasspane-ui--ts-repeater deadline)))
+                                              (when-let ((rep (jetpacs-org-ts-repeater deadline)))
                                                 (jetpacs-text (concat "Repeats " rep) 'caption))
                                               (jetpacs-flow-row
                                                (jetpacs-date-button "Set date"
@@ -3797,29 +3482,6 @@ container would break Compose) and wrap otherwise."
 
 ;; ─── The structured Scheduled/Deadline editor dialog ─────────────────────────
 
-(defun glasspane-ui--set-repeater (type repeater)
-  "Rewrite the repeater cookie on the TYPE planning timestamp at point.
-TYPE is \"SCHEDULED\" or \"DEADLINE\"; REPEATER like \"+1w\" (nil
-removes).  A heading without a TYPE timestamp is a no-op — the dialog
-asks for a date first."
-  (save-excursion
-    (org-back-to-heading t)
-    (let ((bound (save-excursion (outline-next-heading) (point))))
-      (when (re-search-forward (concat type ":[ \t]*\\([<[]\\)") bound t)
-        (let* ((beg (match-beginning 1))
-               (close (if (equal (match-string 1) "<") ">" "]"))
-               (end (progn (goto-char beg) (search-forward close bound)))
-               (ts (buffer-substring-no-properties beg end))
-               (stripped (replace-regexp-in-string
-                          "[ \t]+[.+]?\\+[0-9]+[hdwmy]" "" ts))
-               (new (if repeater
-                        (concat (substring stripped 0 -1) " " repeater
-                                (substring stripped -1))
-                      stripped)))
-          (delete-region beg end)
-          (goto-char beg)
-          (insert new))))))
-
 (defconst glasspane-ui--repeater-choices
   '("none" "+1d" "+1w" "+2w" "+1m" "+3m" "+1y")
   "Repeater cookies offered in the planning dialog.")
@@ -3838,9 +3500,9 @@ stay live."
                         (org-entry-get nil type)))))
          (headline (nth 0 info))
          (ts (nth 1 info))
-         (date (glasspane-ui--ts-date ts))
-         (time (glasspane-ui--ts-time ts))
-         (rep (glasspane-ui--ts-repeater ts))
+         (date (jetpacs-org-ts-date ts))
+         (time (jetpacs-org-ts-time ts))
+         (rep (jetpacs-org-ts-repeater ts))
          (scheduled-p (equal type "SCHEDULED"))
          (set-name (if scheduled-p "heading.schedule" "heading.deadline"))
          (mark `(dialog . ,type))
@@ -4035,7 +3697,7 @@ the end of the file."
                     args
                     (lambda ()
                       (let* ((sched (org-entry-get nil "SCHEDULED"))
-                             (date (or (glasspane-ui--ts-date sched)
+                             (date (or (jetpacs-org-ts-date sched)
                                        (format-time-string "%Y-%m-%d"))))
                         (org-schedule nil (format "%s %s" date time))))
                     t))
@@ -4053,7 +3715,7 @@ the end of the file."
                     args
                     (lambda ()
                       (let* ((dl (org-entry-get nil "DEADLINE"))
-                             (date (or (glasspane-ui--ts-date dl)
+                             (date (or (jetpacs-org-ts-date dl)
                                        (format-time-string "%Y-%m-%d"))))
                         (org-deadline nil (format "%s %s" date time))))
                     t))
@@ -4074,7 +3736,7 @@ the end of the file."
                      (t "none")))
              (value (unless (equal value "none") value)))
         (when (glasspane-ui--at-ref
-               args (lambda () (glasspane-ui--set-repeater type value)) t)
+               args (lambda () (jetpacs-org-set-repeater type value)) t)
           (jetpacs-shell-notify (if value (format "Repeats %s" value)
                                   "Repeat removed"))
           (glasspane-ui--planning-dialog-resend args type)
@@ -4920,28 +4582,6 @@ row) skips the realign instead of erroring."
     (glasspane-org--save-and-invalidate))
   (jetpacs-shell-push))
 
-(defun glasspane-ui--table-field-formula ()
-  "The #+TBLFM entry (LHS . RHS) computing the field at point, or nil.
-Field formulas (@R$C, with @< / @> resolved to concrete rows) win over
-column formulas ($C), mirroring org's own recalculation.  Point must be
-inside a table.  The LHS comes back exactly as written in the #+TBLFM
-line, so callers can `assoc' it in `org-table-get-stored-formulas'
-output to update the formula in place.  Formulas keyed by field name
-are not resolved — those cells stay value-editable."
-  (org-table-analyze)
-  (let* ((line (count-lines org-table-current-begin-pos
-                            (line-beginning-position)))
-         (dline (org-table-line-to-dline line))
-         (col (org-table-current-column))
-         (stored (org-table-get-stored-formulas t))
-         (norm (lambda (kv)
-                 (or (ignore-errors
-                       (org-table-formula-handle-first/last-rc (car kv)))
-                     (car kv)))))
-    (when (and dline col (> col 0))
-      (or (cl-find (format "@%d$%d" dline col) stored :key norm :test #'equal)
-          (cl-find (format "$%d" col) stored :key norm :test #'equal)))))
-
 (with-jetpacs-owner "glasspane"
   (jetpacs-defaction "org.table.edit"
     ;; Tap a table cell in the reader: a native dialog (bridged
@@ -4959,7 +4599,7 @@ are not resolved — those cells stay value-editable."
                   (org-with-wide-buffer
                    (goto-char pos)
                    (unless (org-at-table-p) (error "No table cell here"))
-                   (setq formula (glasspane-ui--table-field-formula))
+                   (setq formula (jetpacs-org-table-field-formula))
                    (unless formula
                      (setq current (string-trim (org-table-get-field))))))
                 (if formula
@@ -5217,7 +4857,7 @@ Creates the datetree levels (and the file) on first use."
                  :content-description "Previous day")
                 (jetpacs-box
                  (list (jetpacs-date-button
-                        (glasspane-ui--format-date
+                        (jetpacs-date-format
                          date (if today-p "Today · %a, %b %e" "%a, %b %e, %Y"))
                         (jetpacs-action "journal.goto" :when-offline "drop")
                         :value date))
@@ -5350,7 +4990,7 @@ not exist in jetpacs 1.5.0; until it does, this seam stays on the raw var."
       (let ((delta (alist-get 'delta args)))
         (when (integerp delta)
           (setq glasspane-journal--date
-                (glasspane-ui--shift-date (glasspane-journal--current)
+                (jetpacs-date-shift (glasspane-journal--current)
                                           delta 'day))
           (jetpacs-shell-push)))))
 
@@ -5622,7 +5262,7 @@ back here instead of the file editor."
                  (list (jetpacs-span (or (alist-get 'todo item) "")
                                   :strike (and (glasspane-views--done-p item) t))))
                 (jetpacs-table-cell
-                 (list (jetpacs-span (or (glasspane-ui--ts-date
+                 (list (jetpacs-span (or (jetpacs-org-ts-date
                                        (alist-get 'scheduled item))
                                       ""))))
                 (jetpacs-table-cell (glasspane-views--tag-spans item))))))
@@ -5705,7 +5345,7 @@ cleared when a view opens or closes."
                          (t anchor)))
          (items-by-date (seq-group-by
                          (lambda (it)
-                           (glasspane-ui--ts-date (alist-get 'scheduled it)))
+                           (jetpacs-org-ts-date (alist-get 'scheduled it)))
                          items))
          (unscheduled (cdr (assoc nil items-by-date)))
          (selected-items (cdr (assoc selected-date items-by-date))))
@@ -9103,18 +8743,17 @@ wanted is actually missing.  Restart = the natural retry."
 ;; layouts available, and — the SDUI dependency model — the Emacs packages the
 ;; engine relies on so the composer can install them.
 ;;
-;; The manifest is built from LIVE registrations (`jetpacs-source-catalog',
-;; `jetpacs-action-catalog'), so it can never drift from what the app actually
-;; registers; `emacs/build-pack.el' regenerates the committed JSON and a test
-;; asserts the two agree.  Rich rendering stays in `:builder's that lean on the
-;; declared engine (vulpea/org-ql/…) — the manifest is the seam, not a wire DSL.
+;; The generic assembly seam lives in core (`jetpacs-pack'); this file is
+;; only Glasspane's identity — id, version, minimum api, dependency set —
+;; fed through it.  The manifest is built from LIVE registrations, so it can
+;; never drift from what the app actually registers; `emacs/build-pack.el'
+;; regenerates the committed JSON and a test asserts the two agree.  Rich
+;; rendering stays in `:builder's that lean on the declared engine
+;; (vulpea/org-ql/…) — the manifest is the seam, not a wire DSL.
 
 ;;; Code:
 
-(require 'cl-lib)
-(require 'jetpacs-source)               ; jetpacs-source-catalog
-(require 'jetpacs-surfaces)             ; jetpacs-action-catalog
-(require 'jetpacs-lint)                 ; jetpacs-lint-spec-layouts
+(require 'jetpacs-pack)
 
 (defconst glasspane-pack-id "glasspane"
   "The pack id the composer keys Glasspane by.")
@@ -9135,48 +8774,24 @@ The whole point of the SDUI split: the server may lean on rich packages
 (vulpea's note index, org-ql's query language) and the composer brings them
 in automatically — Glasspane never re-implements what these already do.")
 
-(defun glasspane-pack--sort-by (key entries)
-  "ENTRIES (a list of alists) sorted by their KEY value, for a stable manifest.
-`jetpacs-source-catalog'/`jetpacs-action-catalog' iterate a hash table, so a
-deterministic snapshot must impose an order."
-  (sort (copy-sequence entries)
-        (lambda (a b) (string< (format "%s" (alist-get key a))
-                               (format "%s" (alist-get key b))))))
-
 (defun glasspane-pack-manifest ()
   "The Glasspane engine-pack manifest, built from live registrations.
-A JSON-serializable alist; sources and actions are name-sorted so the
-generated `glasspane-pack.json' is byte-stable."
-  (list (cons 'pack_id         glasspane-pack-id)
-        (cons 'pack_version    glasspane-pack-version)
-        (cons 'min_jetpacs_api glasspane-pack-min-jetpacs-api)
-        (cons 'feature         glasspane-pack-id)
-        (cons 'depends         (vconcat glasspane-pack-depends))
-        (cons 'layouts         (vconcat jetpacs-lint-spec-layouts))
-        (cons 'sources         (vconcat (glasspane-pack--sort-by
-                                         'name (jetpacs-source-catalog))))
-        ;; Owner-filtered: every Glasspane registration is wrapped in
-        ;; `with-jetpacs-owner', so the catalog is exact regardless of what
-        ;; else the build environment loaded.  (Sources stay unfiltered —
-        ;; `jetpacs-source-catalog' has no owner arg at this core pin.)
-        (cons 'actions         (vconcat (glasspane-pack--sort-by
-                                         'action (jetpacs-action-catalog "glasspane"))))))
+Owner-filtered: every Glasspane registration is wrapped in
+`with-jetpacs-owner', so the action catalog is exact regardless of what
+else the build environment loaded."
+  (jetpacs-pack-manifest :id glasspane-pack-id
+                         :version glasspane-pack-version
+                         :min-api glasspane-pack-min-jetpacs-api
+                         :depends glasspane-pack-depends
+                         :owner "glasspane"))
 
 (defun glasspane-pack-json ()
   "The manifest as pretty-printed, newline-terminated JSON text."
-  (with-temp-buffer
-    (insert (json-serialize (glasspane-pack-manifest)
-                            :null-object :null :false-object :false))
-    (json-pretty-print-buffer)
-    (goto-char (point-max))
-    (unless (bolp) (insert "\n"))
-    (buffer-string)))
+  (jetpacs-pack-json (glasspane-pack-manifest)))
 
 (defun glasspane-pack-write (file)
   "Write the manifest JSON to FILE.  Returns FILE."
-  (let ((coding-system-for-write 'utf-8))
-    (with-temp-file file (insert (glasspane-pack-json))))
-  file)
+  (jetpacs-pack-write (glasspane-pack-manifest) file))
 
 (provide 'glasspane-pack)
 ;;; glasspane-pack.el ends here

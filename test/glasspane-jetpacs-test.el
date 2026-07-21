@@ -5,39 +5,6 @@
 
 ;; ─── Capture ────────────────────────────────────────────────────────────────
 
-(ert-deftest jetpacs-capture-fills-template ()
-  "The filled capture template must be the one that actually runs."
-  (let* ((file (make-temp-file "jetpacs-capture-test" nil ".org"))
-         (org-capture-templates
-          `(("t" "Task" entry (file ,file)
-             "* TODO %^{Headline}\n%^{Notes|no notes}\n%?"))))
-    (unwind-protect
-        (progn
-          (glasspane-org--do-capture "t" '(("Headline" . "Buy milk")
-                                      ("Notes" . "2% fat")))
-          (let ((content (with-current-buffer (find-file-noselect file)
-                           (buffer-string))))
-            (should (string-search "* TODO Buy milk" content))
-            (should (string-search "2% fat" content))
-            (should-not (string-search "%^{" content))))
-      (delete-file file))))
-
-(ert-deftest jetpacs-capture-shared-body ()
-  "Text shared from another app is appended below the filled template."
-  (let* ((file (make-temp-file "jetpacs-share-test" nil ".org"))
-         (org-capture-templates
-          `(("t" "Task" entry (file ,file) "* TODO %^{Headline}\n%?"))))
-    (unwind-protect
-        (progn
-          (glasspane-org--do-capture "t" '(("Headline" . "Read article"))
-                                "https://example.com/post\nInteresting bit.")
-          (let ((content (with-current-buffer (find-file-noselect file)
-                           (buffer-string))))
-            (should (string-search "* TODO Read article" content))
-            (should (string-search "https://example.com/post" content))
-            (should (string-search "Interesting bit." content))))
-      (delete-file file))))
-
 (ert-deftest jetpacs-capture-submit-reads-form-and-rotates ()
   "org.capture.submit reads its fields through the capture `jetpacs-form'
 and resets it — rotating the ids so stale device-side field state
@@ -47,10 +14,10 @@ can't resurface in the next capture."
         (glasspane-ui--shared-text nil)
         (glasspane-ui--shared-subject nil)
         (recorded nil))
-    (cl-letf (((symbol-function 'glasspane-org--capture-templates)
+    (cl-letf (((symbol-function 'jetpacs-org-capture-templates)
                (lambda () '(((key . "t") (description . "Task")
                              (prompts . ["Headline" "Notes"])))))
-              ((symbol-function 'glasspane-org--do-capture)
+              ((symbol-function 'jetpacs-org-capture-run)
                (lambda (key values &optional _body)
                  (setq recorded (cons key values))))
               ((symbol-function 'jetpacs-shell-push)
@@ -71,7 +38,7 @@ can't resurface in the next capture."
 (ert-deftest jetpacs-upcoming-reminders ()
   "Timed items within the horizon become reminder specs; untimed don't."
   (let* ((file (make-temp-file "jetpacs-remind" nil ".org"))
-         (tomorrow (glasspane-ui--shift-date (format-time-string "%Y-%m-%d")
+         (tomorrow (jetpacs-date-shift (format-time-string "%Y-%m-%d")
                                             1 'day)))
     (with-temp-file file
       (insert (format "* TODO Standup\nSCHEDULED: <%s 09:15>\n" tomorrow)
@@ -170,7 +137,7 @@ can't resurface in the next capture."
 (ert-deftest jetpacs-agenda-anchored-extraction ()
   "Navigation anchors actually change the extracted range."
   (let* ((file (make-temp-file "jetpacs-agenda-nav" nil ".org"))
-         (tomorrow (glasspane-ui--shift-date
+         (tomorrow (jetpacs-date-shift
                     (format-time-string "%Y-%m-%d") 1 'day)))
     (with-temp-file file
       (insert (format "* TODO Future thing\nSCHEDULED: <%s>\n" tomorrow)))
@@ -277,15 +244,6 @@ can't resurface in the next capture."
     (should (equal (glasspane-ui--search-filter-query) "(tags \"home\")"))))
 
 ;; ─── Agenda date arithmetic & widgets ───────────────────────────────────────
-
-(ert-deftest jetpacs-agenda-date-math ()
-  (should (equal (glasspane-ui--shift-date "2026-07-01" 1 'day) "2026-07-02"))
-  (should (equal (glasspane-ui--shift-date "2026-07-01" -1 'day) "2026-06-30"))
-  (should (equal (glasspane-ui--shift-date "2026-07-01" -1 'week) "2026-06-24"))
-  (should (equal (glasspane-ui--shift-date "2026-01-31" 1 'month) "2026-02-28"))
-  (should (equal (glasspane-ui--shift-date "2024-01-31" 1 'month) "2024-02-29"))
-  (should (equal (glasspane-ui--shift-date "2026-12-15" 1 'month) "2027-01-15"))
-  (should (equal (glasspane-ui--shift-date "2026-01-15" -1 'month) "2025-12-15")))
 
 (ert-deftest jetpacs-agenda-widgets-serialize ()
   "Agenda cards, nav rows, and the month grid build and serialize."

@@ -230,7 +230,7 @@ back here instead of the file editor."
                  (list (jetpacs-span (or (alist-get 'todo item) "")
                                   :strike (and (glasspane-views--done-p item) t))))
                 (jetpacs-table-cell
-                 (list (jetpacs-span (or (glasspane-ui--ts-date
+                 (list (jetpacs-span (or (jetpacs-org-ts-date
                                        (alist-get 'scheduled item))
                                       ""))))
                 (jetpacs-table-cell (glasspane-views--tag-spans item))))))
@@ -313,7 +313,7 @@ cleared when a view opens or closes."
                          (t anchor)))
          (items-by-date (seq-group-by
                          (lambda (it)
-                           (glasspane-ui--ts-date (alist-get 'scheduled it)))
+                           (jetpacs-org-ts-date (alist-get 'scheduled it)))
                          items))
          (unscheduled (cdr (assoc nil items-by-date)))
          (selected-items (cdr (assoc selected-date items-by-date))))

@@ -266,17 +266,6 @@ is the finished state."
             ;; `jetpacs-settings-registry', rendered from its custom-type.
             (jetpacs-settings-sections)))))
 
-(defun glasspane-org--format-clock-time (start end)
-  (condition-case nil
-      (let ((s-date (substring start 0 10))
-            (s-time (substring start -5))
-            (e-date (substring end 0 10))
-            (e-time (substring end -5)))
-        (if (equal s-date e-date)
-            (format "%s, %s to %s" s-date s-time e-time)
-          (format "%s %s to %s %s" s-date s-time e-date e-time)))
-    (error (format "%s to %s" start end))))
-
 (defvar glasspane-ui-detail-nodes-functions nil
   "Abnormal hook: functions from a detail REF to extra section nodes.
 App layers (notes backlinks, SRS flashcards) contribute detail-view

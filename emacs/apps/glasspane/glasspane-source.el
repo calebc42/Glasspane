@@ -38,7 +38,7 @@
 
 (defun glasspane-source--iso-date (ts)
   "The \"YYYY-MM-DD\" date inside org timestamp string TS, or nil.
-Mirrors the agenda's presentation helper `glasspane-ui--ts-date'; kept
+Mirrors the agenda's presentation helper `jetpacs-org-ts-date'; kept
 local so the data layer does not `require' a view module."
   (when (and (stringp ts)
              (string-match "\\([0-9]\\{4\\}-[0-9]\\{2\\}-[0-9]\\{2\\}\\)" ts))

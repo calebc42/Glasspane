@@ -76,7 +76,7 @@ the tile picker."
 
 (defun glasspane-ui-show-capture-dialog ()
   (condition-case err
-      (let* ((templates (glasspane-org--capture-templates))
+      (let* ((templates (jetpacs-org-capture-templates))
              (template-buttons
               (mapcar (lambda (t-info)
                         (jetpacs-button
@@ -124,7 +124,7 @@ keeps a previous capture's device-side field state from resurfacing."
                        glasspane-ui--shared-subject))
   (condition-case err
       (let* ((form (glasspane-capture--form))
-             (templates (glasspane-org--capture-templates))
+             (templates (jetpacs-org-capture-templates))
              (tmpl (cl-find-if
                     (lambda (t-info) (equal (alist-get 'key t-info) template-key))
                     templates))
@@ -195,7 +195,7 @@ appears on the next replay."
     (lambda (args _)
       (let ((key (alist-get 'key args)))
         (condition-case err
-            (let* ((templates (glasspane-org--capture-templates))
+            (let* ((templates (jetpacs-org-capture-templates))
                    (tmpl (cl-find-if
                           (lambda (t-info) (equal (alist-get 'key t-info) key))
                           templates))
@@ -208,7 +208,7 @@ appears on the next replay."
                               (let ((v (jetpacs-form-value form p)))
                                 (cons p (if (stringp v) v ""))))
                             prompts)))
-              (glasspane-org--do-capture key values glasspane-ui--shared-text)
+              (jetpacs-org-capture-run key values glasspane-ui--shared-text)
               (setq glasspane-ui--shared-text nil
                     glasspane-ui--shared-subject nil)
               (jetpacs-org-cache-invalidate 'glasspane)

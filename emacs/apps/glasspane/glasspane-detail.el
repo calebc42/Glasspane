@@ -456,49 +456,6 @@ breaks links); every other value is an inline input whose submit runs
                                :on-submit action))))
       :weight 3))))
 
-(defun glasspane-org--parse-logbook (text)
-  ;; Keywords may be written lowercase in org files ("clock:" is as valid
-  ;; as "CLOCK:"), so match case-insensitively — explicitly, like
-  ;; org-element does, never relying on the ambient `case-fold-search'.
-  (let ((case-fold-search t)
-        (lines (split-string text "\n" t "[ \t]+"))
-        entries current-entry)
-    (dolist (line lines)
-      (cond
-       ((string-match "^CLOCK: \\[\\(.*?\\)\\]--\\[\\(.*?\\)\\] =>[ \t]+\\(.*\\)$" line)
-        (when current-entry (push current-entry entries))
-        (setq current-entry (list :type 'clock :start (match-string 1 line)
-                                  :end (match-string 2 line)
-                                  :duration (match-string 3 line))))
-       ((string-match "^CLOCK: \\[\\(.*?\\)\\]$" line)
-        (when current-entry (push current-entry entries))
-        (setq current-entry (list :type 'clock :start (match-string 1 line) :active t)))
-       ((string-match "^- Note taken on \\(\\[.*?\\]\\) \\\\\\\\$" line)
-        (when current-entry (push current-entry entries))
-        (setq current-entry (list :type 'note :timestamp (match-string 1 line) :content "")))
-       ((string-match "^- State \"\\(.*?\\)\"[ \t]+from \"\\(.*?\\)\"[ \t]+\\(\\[.*?\\]\\)\\(\\(?: \\\\\\\\\\)?\\)$" line)
-        (when current-entry (push current-entry entries))
-        (setq current-entry (list :type 'state :to (match-string 1 line) :from (match-string 2 line)
-                                  :timestamp (match-string 3 line)
-                                  :has-note (not (string-empty-p (match-string 4 line)))
-                                  :content "")))
-       ((string-match "^- State \"\\(.*?\\)\"[ \t]+\\(\\[.*?\\]\\)\\(\\(?: \\\\\\\\\\)?\\)$" line)
-        (when current-entry (push current-entry entries))
-        (setq current-entry (list :type 'state :to (match-string 1 line)
-                                  :timestamp (match-string 2 line)
-                                  :has-note (not (string-empty-p (match-string 3 line)))
-                                  :content "")))
-       (t
-        ;; Continuation line
-        (when current-entry
-          (let ((content (plist-get current-entry :content)))
-            (setq current-entry (plist-put current-entry :content
-                                           (if (string-empty-p content)
-                                               line
-                                             (concat content "\n" line)))))))))
-    (when current-entry (push current-entry entries))
-    (nreverse entries)))
-
 (defun glasspane-ui--render-logbook-entry (entry)
   (let ((type (plist-get entry :type)))
     (cl-case type
@@ -510,7 +467,7 @@ breaks links); every other value is an inline input whose submit runs
           (jetpacs-column
            (jetpacs-text (if (plist-get entry :active)
                           (format "Started %s" (plist-get entry :start))
-                        (glasspane-org--format-clock-time (plist-get entry :start) (plist-get entry :end)))
+                        (jetpacs-org-format-clock-time (plist-get entry :start) (plist-get entry :end)))
                       'body t nil nil nil [0 0 4 0])
            (jetpacs-text (plist-get entry :duration) 'caption))))
         :padding [8 16 8 16]))
@@ -538,20 +495,6 @@ breaks links); every other value is an inline input whose submit runs
                         (plist-get entry :timestamp))
                       'caption))))
         :padding [8 16 8 16])))))
-
-(defun glasspane-ui--logbook-entries (pos)
-  "Return structured logbook entries for heading at POS, or nil.
-Drawer delimiters are matched case-insensitively (\":logbook:\" is
-valid org), explicitly rather than via ambient `case-fold-search'."
-  (save-excursion
-    (goto-char pos)
-    (let ((case-fold-search t)
-          (end (save-excursion (org-end-of-meta-data t) (point))))
-      (goto-char pos)
-      (when (re-search-forward "^[ \t]*:LOGBOOK:[ \t]*$" end t)
-        (let ((start (match-end 0)))
-          (when (re-search-forward "^[ \t]*:END:[ \t]*$" end t)
-            (glasspane-org--parse-logbook (buffer-substring-no-properties start (match-beginning 0)))))))))
 
 (defun glasspane-ui--properties-section (props ref pos)
   "The Properties collapsible: KEY → VALUE rows plus an + Add button.
@@ -662,8 +605,8 @@ container would break Compose) and wrap otherwise."
                                                   :args `((ref . ,ref))
                                                   :when-offline "queue"
                                                   :dedupe (format "save-detail/%s" pos)))))
-          (let ((sdate (glasspane-ui--ts-date scheduled))
-                (ddate (glasspane-ui--ts-date deadline))
+          (let ((sdate (jetpacs-org-ts-date scheduled))
+                (ddate (jetpacs-org-ts-date deadline))
                 (entry-props (ignore-errors
                                (with-current-buffer buf
                                  (org-with-wide-buffer
@@ -672,7 +615,7 @@ container would break Compose) and wrap otherwise."
                 (logbook-entries (ignore-errors
                                    (with-current-buffer buf
                                      (org-with-wide-buffer
-                                      (glasspane-ui--logbook-entries pos))))))
+                                      (jetpacs-org-logbook-entries pos))))))
             (apply #'jetpacs-lazy-column
                    (delq nil
                          (append
@@ -721,7 +664,7 @@ container would break Compose) and wrap otherwise."
                              (jetpacs-row
                               (if sdate
                                   (jetpacs-date-stamp :date sdate
-                                                   :time (glasspane-ui--ts-time scheduled))
+                                                   :time (jetpacs-org-ts-time scheduled))
                                 (jetpacs-spacer :width 0))
                               (jetpacs-box
                                (list
@@ -731,7 +674,7 @@ container would break Compose) and wrap otherwise."
                                               (jetpacs-text "Scheduled" 'label)
                                               (unless sdate
                                                 (jetpacs-text "Not scheduled" 'caption))
-                                              (when-let ((rep (glasspane-ui--ts-repeater scheduled)))
+                                              (when-let ((rep (jetpacs-org-ts-repeater scheduled)))
                                                 (jetpacs-text (concat "Repeats " rep) 'caption))
                                               (jetpacs-flow-row
                                                (jetpacs-date-button "Set date"
@@ -739,7 +682,7 @@ container would break Compose) and wrap otherwise."
                                                                  :value sdate)
                                                (jetpacs-time-button "Set time"
                                                                  (jetpacs-action "heading.schedule-time" :args ref)
-                                                                 :value (glasspane-ui--ts-time scheduled))
+                                                                 :value (jetpacs-org-ts-time scheduled))
                                                (funcall sched-button "Today" "+0d")
                                                (funcall sched-button "+1d" "+1d")
                                                (funcall sched-button "+1w" "+1w")
@@ -752,7 +695,7 @@ container would break Compose) and wrap otherwise."
                              (jetpacs-row
                               (if ddate
                                   (jetpacs-date-stamp :date ddate
-                                                   :time (glasspane-ui--ts-time deadline))
+                                                   :time (jetpacs-org-ts-time deadline))
                                 (jetpacs-spacer :width 0))
                               (jetpacs-box
                                (list
@@ -762,7 +705,7 @@ container would break Compose) and wrap otherwise."
                                               (jetpacs-text "Deadline" 'label)
                                               (unless ddate
                                                 (jetpacs-text "No deadline" 'caption))
-                                              (when-let ((rep (glasspane-ui--ts-repeater deadline)))
+                                              (when-let ((rep (jetpacs-org-ts-repeater deadline)))
                                                 (jetpacs-text (concat "Repeats " rep) 'caption))
                                               (jetpacs-flow-row
                                                (jetpacs-date-button "Set date"
@@ -851,29 +794,6 @@ container would break Compose) and wrap otherwise."
 
 ;; ─── The structured Scheduled/Deadline editor dialog ─────────────────────────
 
-(defun glasspane-ui--set-repeater (type repeater)
-  "Rewrite the repeater cookie on the TYPE planning timestamp at point.
-TYPE is \"SCHEDULED\" or \"DEADLINE\"; REPEATER like \"+1w\" (nil
-removes).  A heading without a TYPE timestamp is a no-op — the dialog
-asks for a date first."
-  (save-excursion
-    (org-back-to-heading t)
-    (let ((bound (save-excursion (outline-next-heading) (point))))
-      (when (re-search-forward (concat type ":[ \t]*\\([<[]\\)") bound t)
-        (let* ((beg (match-beginning 1))
-               (close (if (equal (match-string 1) "<") ">" "]"))
-               (end (progn (goto-char beg) (search-forward close bound)))
-               (ts (buffer-substring-no-properties beg end))
-               (stripped (replace-regexp-in-string
-                          "[ \t]+[.+]?\\+[0-9]+[hdwmy]" "" ts))
-               (new (if repeater
-                        (concat (substring stripped 0 -1) " " repeater
-                                (substring stripped -1))
-                      stripped)))
-          (delete-region beg end)
-          (goto-char beg)
-          (insert new))))))
-
 (defconst glasspane-ui--repeater-choices
   '("none" "+1d" "+1w" "+2w" "+1m" "+3m" "+1y")
   "Repeater cookies offered in the planning dialog.")
@@ -892,9 +812,9 @@ stay live."
                         (org-entry-get nil type)))))
          (headline (nth 0 info))
          (ts (nth 1 info))
-         (date (glasspane-ui--ts-date ts))
-         (time (glasspane-ui--ts-time ts))
-         (rep (glasspane-ui--ts-repeater ts))
+         (date (jetpacs-org-ts-date ts))
+         (time (jetpacs-org-ts-time ts))
+         (rep (jetpacs-org-ts-repeater ts))
          (scheduled-p (equal type "SCHEDULED"))
          (set-name (if scheduled-p "heading.schedule" "heading.deadline"))
          (mark `(dialog . ,type))
@@ -1089,7 +1009,7 @@ the end of the file."
                     args
                     (lambda ()
                       (let* ((sched (org-entry-get nil "SCHEDULED"))
-                             (date (or (glasspane-ui--ts-date sched)
+                             (date (or (jetpacs-org-ts-date sched)
                                        (format-time-string "%Y-%m-%d"))))
                         (org-schedule nil (format "%s %s" date time))))
                     t))
@@ -1107,7 +1027,7 @@ the end of the file."
                     args
                     (lambda ()
                       (let* ((dl (org-entry-get nil "DEADLINE"))
-                             (date (or (glasspane-ui--ts-date dl)
+                             (date (or (jetpacs-org-ts-date dl)
                                        (format-time-string "%Y-%m-%d"))))
                         (org-deadline nil (format "%s %s" date time))))
                     t))
@@ -1128,7 +1048,7 @@ the end of the file."
                      (t "none")))
              (value (unless (equal value "none") value)))
         (when (glasspane-ui--at-ref
-               args (lambda () (glasspane-ui--set-repeater type value)) t)
+               args (lambda () (jetpacs-org-set-repeater type value)) t)
           (jetpacs-shell-notify (if value (format "Repeats %s" value)
                                   "Repeat removed"))
           (glasspane-ui--planning-dialog-resend args type)

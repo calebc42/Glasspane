@@ -172,13 +172,13 @@ deadline in orange (red+bold once overdue), clock totals as h:mm."
             (should (string-search glasspane-org-reader--overdue-color json))
             ;; Clock badge is opt-in and off by default.
             (should-not (string-search "clocked" json)))
-          (let* ((glasspane-org-reader-show-clocked t)
+          (let* ((jetpacs-org-outline-show-clocked t)
                  (json (json-serialize
                         (jetpacs-tests--canon
                          (apply #'jetpacs-column (glasspane-org-reader-file file)))
                         :null-object :null :false-object :false)))
             (should (string-search "1:30 clocked" json)))
-          (let* ((glasspane-org-reader-show-deadline nil)
+          (let* ((jetpacs-org-outline-show-deadline nil)
                  (json (json-serialize
                         (jetpacs-tests--canon
                          (apply #'jetpacs-column (glasspane-org-reader-file file)))
@@ -216,7 +216,7 @@ drops the inline PROPERTIES drawers from reader output."
             "clock: [2026-07-03 Fri 10:00]--[2026-07-03 Fri 11:00] =>  1:00\n"
             ":end:\n")
     (delay-mode-hooks (org-mode))
-    (let ((entries (glasspane-ui--logbook-entries 1)))
+    (let ((entries (jetpacs-org-logbook-entries 1)))
       (should (= (length entries) 1))
       (should (eq (plist-get (car entries) :type) 'clock))))
   ;; Reader/detail rendering: folded in the reader, suppressed in detail.

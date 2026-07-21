@@ -112,7 +112,7 @@ Creates the datetree levels (and the file) on first use."
                  :content-description "Previous day")
                 (jetpacs-box
                  (list (jetpacs-date-button
-                        (glasspane-ui--format-date
+                        (jetpacs-date-format
                          date (if today-p "Today · %a, %b %e" "%a, %b %e, %Y"))
                         (jetpacs-action "journal.goto" :when-offline "drop")
                         :value date))
@@ -245,7 +245,7 @@ not exist in jetpacs 1.5.0; until it does, this seam stays on the raw var."
       (let ((delta (alist-get 'delta args)))
         (when (integerp delta)
           (setq glasspane-journal--date
-                (glasspane-ui--shift-date (glasspane-journal--current)
+                (jetpacs-date-shift (glasspane-journal--current)
                                           delta 'day))
           (jetpacs-shell-push)))))
 

@@ -128,28 +128,6 @@ Reads the memoised day extraction, so a push recomputes nothing; nil
         a
       (format-time-string "%Y-%m-%d"))))
 
-(defun glasspane-ui--shift-date (date n unit)
-  "Shift DATE (\"YYYY-MM-DD\") by N UNITs (`day', `week', or `month').
-Month arithmetic clamps the day into the target month, so Jan 31 + 1
-month is Feb 28, not an invalid date."
-  (pcase-let ((`(,y ,m ,d) (mapcar #'string-to-number (split-string date "-"))))
-    (if (eq unit 'month)
-        (let* ((total (+ (* 12 y) (1- m) n))
-               (ny (/ total 12))
-               (nm (1+ (% total 12))))
-          (format "%04d-%02d-%02d" ny nm
-                  (min d (calendar-last-day-of-month nm ny))))
-      (let ((days (* n (if (eq unit 'week) 7 1))))
-        ;; Noon avoids DST-transition off-by-one-day surprises.
-        (format-time-string "%Y-%m-%d"
-                            (time-add (encode-time 0 0 12 d m y)
-                                      (* days 86400)))))))
-
-(defun glasspane-ui--format-date (date fmt)
-  "Render DATE (\"YYYY-MM-DD\") through `format-time-string' FMT."
-  (pcase-let ((`(,y ,m ,d) (mapcar #'string-to-number (split-string date "-"))))
-    (format-time-string fmt (encode-time 0 0 12 d m y))))
-
 (defun glasspane-ui--agenda-nav-row (mode anchor)
   "The ‹ [range label] [today] › navigation row for the agenda header."
   (let* ((today (format-time-string "%Y-%m-%d"))
@@ -157,12 +135,12 @@ month is Feb 28, not an invalid date."
                      ("month" (equal (substring anchor 0 7) (substring today 0 7)))
                      (_ (equal anchor today))))
          (label (pcase mode
-                  ("month" (glasspane-ui--format-date anchor "%B %Y"))
+                  ("month" (jetpacs-date-format anchor "%B %Y"))
                   ("week" (concat "Week of "
-                                  (glasspane-ui--format-date anchor "%b %d")))
+                                  (jetpacs-date-format anchor "%b %d")))
                   (_ (if at-today
-                         (concat "Today · " (glasspane-ui--format-date anchor "%a, %b %d"))
-                       (glasspane-ui--format-date anchor "%a, %b %d"))))))
+                         (concat "Today · " (jetpacs-date-format anchor "%a, %b %d"))
+                       (jetpacs-date-format anchor "%a, %b %d"))))))
     (apply #'jetpacs-row
            (delq nil
                  (list
@@ -205,7 +183,7 @@ month is Feb 28, not an invalid date."
     (let* ((month (string-to-number (match-string 2 ts)))
            (day   (string-to-number (match-string 3 ts)))
            (mon   (jetpacs-month-abbrev month))
-           (time  (glasspane-ui--ts-time ts)))
+           (time  (jetpacs-org-ts-time ts)))
       (if time (format "%s %d %s" mon day time)
         (format "%s %d" mon day)))))
 
@@ -475,25 +453,6 @@ next push. No :id — a background re-push must not yank the user's tab."
                          :title "No tasks"
                          :caption "Nothing matches this filter.")))))
 
-(defun glasspane-ui--ts-date (ts)
-  "Return the YYYY-MM-DD date inside org timestamp string TS, or nil."
-  (when (and (stringp ts)
-             (string-match "\\([0-9]\\{4\\}-[0-9]\\{2\\}-[0-9]\\{2\\}\\)" ts))
-    (match-string 1 ts)))
-
-(defun glasspane-ui--ts-time (ts)
-  "Return the HH:MM time inside org timestamp string TS, or nil."
-  (when (and (stringp ts)
-             (string-match "\\([0-9]\\{1,2\\}:[0-9]\\{2\\}\\)" ts))
-    (match-string 1 ts)))
-
-(defun glasspane-ui--ts-repeater (ts)
-  "Return the repeater cookie (e.g. \"+1w\", \".+2d\") inside TS, or nil.
-The one part of a timestamp the date-stamp chip can't display."
-  (when (and (stringp ts)
-             (string-match "\\([.+]?\\+[0-9]+[hdwmy]\\)" ts))
-    (match-string 1 ts)))
-
 (with-jetpacs-owner "glasspane"
   (jetpacs-defaction "tasks.filter"
     (lambda (args _)
@@ -587,7 +546,7 @@ with the new states.  Returns non-nil when persisting succeeded."
         (when (eq unit 'month)
           (setq anchor (concat (substring anchor 0 7) "-01")))
         (jetpacs-ui-state-put "agenda-anchor"
-                           (glasspane-ui--shift-date anchor dir unit))
+                           (jetpacs-date-shift anchor dir unit))
         (jetpacs-shell-push)))))
 
 (defun glasspane-ui--org-editor-body (file)

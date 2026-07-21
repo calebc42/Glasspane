@@ -30,8 +30,8 @@
   "Unfinished TODOs scheduled before today carry over; done/future don't."
   (let* ((file (make-temp-file "jetpacs-carried" nil ".org"))
          (today (glasspane-journal--today))
-         (yesterday (glasspane-ui--shift-date today -1 'day))
-         (tomorrow (glasspane-ui--shift-date today 1 'day)))
+         (yesterday (jetpacs-date-shift today -1 'day))
+         (tomorrow (jetpacs-date-shift today 1 'day)))
     (with-temp-file file
       (insert (format "* TODO Old task\nSCHEDULED: <%s>\n" yesterday)
               (format "* DONE Done task\nSCHEDULED: <%s>\n" yesterday)
@@ -53,7 +53,7 @@ input id (the server-driven field clear)."
          (glasspane-journal--date nil)
          (jetpacs--forms (make-hash-table :test 'equal))
          (today (glasspane-journal--today))
-         (yesterday (glasspane-ui--shift-date today -1 'day)))
+         (yesterday (jetpacs-date-shift today -1 'day)))
     (unwind-protect
         (cl-letf (((symbol-function 'jetpacs-shell-push)
                    (cl-function (lambda (&optional _tab &key _switch-to)))))
@@ -90,7 +90,7 @@ input id (the server-driven field clear)."
          (glasspane-journal-file file)
          (glasspane-journal--date nil)
          (today (glasspane-journal--today))
-         (yesterday (glasspane-ui--shift-date today -1 'day)))
+         (yesterday (jetpacs-date-shift today -1 'day)))
     (with-temp-file agenda
       (insert (format "* TODO Carry me\nSCHEDULED: <%s>\n" yesterday)))
     (unwind-protect

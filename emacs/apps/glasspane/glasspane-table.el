@@ -84,28 +84,6 @@ row) skips the realign instead of erroring."
     (glasspane-org--save-and-invalidate))
   (jetpacs-shell-push))
 
-(defun glasspane-ui--table-field-formula ()
-  "The #+TBLFM entry (LHS . RHS) computing the field at point, or nil.
-Field formulas (@R$C, with @< / @> resolved to concrete rows) win over
-column formulas ($C), mirroring org's own recalculation.  Point must be
-inside a table.  The LHS comes back exactly as written in the #+TBLFM
-line, so callers can `assoc' it in `org-table-get-stored-formulas'
-output to update the formula in place.  Formulas keyed by field name
-are not resolved — those cells stay value-editable."
-  (org-table-analyze)
-  (let* ((line (count-lines org-table-current-begin-pos
-                            (line-beginning-position)))
-         (dline (org-table-line-to-dline line))
-         (col (org-table-current-column))
-         (stored (org-table-get-stored-formulas t))
-         (norm (lambda (kv)
-                 (or (ignore-errors
-                       (org-table-formula-handle-first/last-rc (car kv)))
-                     (car kv)))))
-    (when (and dline col (> col 0))
-      (or (cl-find (format "@%d$%d" dline col) stored :key norm :test #'equal)
-          (cl-find (format "$%d" col) stored :key norm :test #'equal)))))
-
 (with-jetpacs-owner "glasspane"
   (jetpacs-defaction "org.table.edit"
     ;; Tap a table cell in the reader: a native dialog (bridged
@@ -123,7 +101,7 @@ are not resolved — those cells stay value-editable."
                   (org-with-wide-buffer
                    (goto-char pos)
                    (unless (org-at-table-p) (error "No table cell here"))
-                   (setq formula (glasspane-ui--table-field-formula))
+                   (setq formula (jetpacs-org-table-field-formula))
                    (unless formula
                      (setq current (string-trim (org-table-get-field))))))
                 (if formula
