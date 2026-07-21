@@ -27,7 +27,7 @@
 
 (require 'glasspane-clock)
 
-(require 'glasspane-org-toolbar)
+(require 'jetpacs-org-toolbar)
 
 (require 'glasspane-org-reader)
 
@@ -568,10 +568,10 @@ Reset when a different file opens.")
 (add-hook 'jetpacs-files-editor-actions-functions #'glasspane-ui--org-editor-actions)
 
 ;; Org files get the org formatting toolbar above the keyboard — composed
-;; as data in the editor spec (glasspane-org-toolbar.el), so the renderer
+;; as data in the editor spec (jetpacs-org-toolbar.el (core)), so the renderer
 ;; stays app-agnostic and the companion ships no org Kotlin.
 (setq jetpacs-files-editor-toolbar-function
-      (lambda (file) (when (glasspane-ui--org-file-p file) (glasspane-org-toolbar))))
+      (lambda (file) (when (glasspane-ui--org-file-p file) (jetpacs-org-toolbar))))
 
 ;; Org files open reader-first; everything else lands in the editor.
 ;; A fresh file starts unfiltered.

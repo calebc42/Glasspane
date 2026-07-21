@@ -10,7 +10,6 @@ EMACS="${EMACS:-emacs}"
   -L emacs/apps/glasspane \
   -L test \
   -l glasspane-test-helpers \
-  -l glasspane-automations-test \
   -l glasspane-config-test \
   -l glasspane-core-test \
   -l glasspane-demo-test \

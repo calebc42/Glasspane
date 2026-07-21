@@ -21,7 +21,6 @@
 (require 'glasspane-table)
 (require 'glasspane-journal)
 (require 'glasspane-views)
-(require 'glasspane-automations)
 (require 'glasspane-notes)
 (require 'glasspane-srs)
 (require 'glasspane-gallery)

@@ -75,7 +75,6 @@
 
 (require 'glasspane-views)
 
-(require 'glasspane-automations)
 
 (require 'glasspane-notes)
 
@@ -352,20 +351,6 @@ Only run this after an INTENTIONAL wire-format change; review the diff."
      (ref . ((file . "/tmp/a.org") (pos . 90) (headline . "Old chore"))))))
 
 ;; ─── Org-defined automations (AUTO Task 13) ──────────────────────────────────
-
-(defmacro jetpacs-tests--with-automations-file (content &rest body)
-  "Run BODY with a temp automations file holding CONTENT."
-  (declare (indent 1))
-  `(let* ((file (make-temp-file "jetpacs-autom" nil ".org"))
-          (glasspane-automations-file file)
-          (glasspane-automations--ids nil)
-          (jetpacs-triggers--table (make-hash-table :test 'equal))
-          (jetpacs-triggers-changed-hook nil))
-     (unwind-protect
-         (progn (with-temp-file file (insert ,content))
-                ,@body)
-       (when-let ((buf (find-buffer-visiting file))) (kill-buffer buf))
-       (delete-file file))))
 
 ;; ─── Notes bridge: wikilinks + backlinks (PKM 3–4, vulpea mocked) ────────────
 

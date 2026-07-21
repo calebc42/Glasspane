@@ -655,7 +655,7 @@ container would break Compose) and wrap otherwise."
               (jetpacs-column
                (jetpacs-editor (format "detail-%s" pos) content
                             :syntax "org"
-                            :toolbar (glasspane-org-toolbar)
+                            :toolbar (jetpacs-org-toolbar)
                             :line-numbers (and jetpacs-line-numbers
                                                (symbol-name jetpacs-line-numbers))
                             :on-save (jetpacs-action "detail.save"

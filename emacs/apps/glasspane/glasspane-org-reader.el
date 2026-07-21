@@ -16,7 +16,7 @@
 (require 'org)
 (require 'cl-lib)
 (require 'jetpacs-widgets)
-(require 'glasspane-org-rich)
+(require 'jetpacs-org-rich)
 
 (defcustom glasspane-org-reader-max-headings 400
   "Cap on headings rendered in one reader pass, to bound very large files."
@@ -144,9 +144,9 @@ detail view already shows properties in its own section)."
              ;; file + offset enable interactive checkboxes.  SKIP-PROPS
              ;; marks the detail view, which shows LOGBOOK as its own
              ;; structured section — suppress the raw drawer there.
-             (let ((glasspane-org-rich--skip-drawers
+             (let ((jetpacs-org-rich--skip-drawers
                     (and skip-props '("LOGBOOK"))))
-               (glasspane-org-rich-body body (and file (file-name-directory file))
+               (jetpacs-org-rich-body body (and file (file-name-directory file))
                                         file (when body-start (1- body-start)))))
            (mapcar (lambda (c) (glasspane-org-reader--heading-node c file)) children)))))
 
